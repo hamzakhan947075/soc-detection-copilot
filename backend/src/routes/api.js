@@ -20,6 +20,8 @@ const { buildDashboard } = require('../reporting/dashboard');
 const { MITRE_LOOKUP } = require('../mitre/mitreMap');
 const { explainDetection, explainFalsePositives, suggestMappingNarrative, isEnabled: aiEnabled } = require('../ai/aiAssist');
 const { createDetectionRecord } = require('../detections/detectionRecord');
+const detectionStore = require('../persistence/detectionStore');
+const { LifecycleTransitionError, STATUSES } = require('../detections/detectionLifecycle');
 const aiConfigStore = require('../ai/aiConfigStore');
 const { PROVIDERS } = require('../ai/providerDefaults');
 const { callProvider } = require('../ai/providers');
@@ -290,8 +292,71 @@ router.get('/sessions/:sessionId/detections/:detectionId/record', requireSession
   // generate more than one rule/query-language variant for the same
   // detection; the record reflects the latest one).
   const rule = [...session.rules.values()].filter((r) => r.detectionId === detection.id).pop() || null;
-  const record = createDetectionRecord(detection, { logSource: session.logSource, rule });
+  const evaluatorId = `${detection.category}.${detection.mitreHint || 'generic'}`;
+  const persisted = detectionStore.get(evaluatorId);
+  const record = createDetectionRecord(detection, { logSource: session.logSource, rule, persisted });
   res.json(record);
+});
+
+// ---------- Detection lifecycle (persisted, independent of any one session) ----------
+router.post('/sessions/:sessionId/detections/:detectionId/persist', requireSession, (req, res) => {
+  const session = req.session;
+  const detection = (session.detections || []).find((d) => d.id === req.params.detectionId);
+  if (!detection) {
+    res.status(404).json({ error: 'Detection not found.' });
+    return;
+  }
+  const rule = [...session.rules.values()].filter((r) => r.detectionId === detection.id).pop() || null;
+  const record = createDetectionRecord(detection, { logSource: session.logSource, rule });
+  const { author } = req.body || {};
+  const persisted = detectionStore.upsertFromDetectionRecord(record, { author: typeof author === 'string' && author.trim() ? author.trim() : 'analyst' });
+  res.status(201).json(persisted);
+});
+
+router.get('/detections', (_req, res) => {
+  res.json({ detections: detectionStore.listAll() });
+});
+
+router.get('/detections/:evaluatorId', (req, res) => {
+  const record = detectionStore.get(req.params.evaluatorId);
+  if (!record) {
+    res.status(404).json({ error: 'No persisted detection found for this id. Persist it first via POST /sessions/:sessionId/detections/:detectionId/persist.' });
+    return;
+  }
+  res.json(record);
+});
+
+router.get('/detections/:evaluatorId/history', (req, res) => {
+  if (!detectionStore.get(req.params.evaluatorId)) {
+    res.status(404).json({ error: 'No persisted detection found for this id.' });
+    return;
+  }
+  res.json({ history: detectionStore.history(req.params.evaluatorId) });
+});
+
+router.post('/detections/:evaluatorId/transition', (req, res) => {
+  const { status, author, note } = req.body || {};
+  if (typeof status !== 'string' || !status.trim()) {
+    res.status(400).json({ error: `"status" is required. Valid values: ${STATUSES.join(', ')}` });
+    return;
+  }
+  try {
+    const updated = detectionStore.transition(req.params.evaluatorId, status.trim(), {
+      author: typeof author === 'string' && author.trim() ? author.trim() : 'analyst',
+      note: typeof note === 'string' ? note : '',
+    });
+    res.json(updated);
+  } catch (err) {
+    if (err instanceof LifecycleTransitionError) {
+      res.status(409).json({ error: err.message });
+      return;
+    }
+    if (/No persisted detection found/.test(err.message)) {
+      res.status(404).json({ error: err.message });
+      return;
+    }
+    throw err;
+  }
 });
 
 // ---------- Rule generation ----------

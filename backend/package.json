@@ -11,6 +11,7 @@
     "test:coverage": "jest --runInBand --coverage"
   },
   "dependencies": {
+    "better-sqlite3": "^13.0.3",
     "cors": "^2.8.5",
     "express": "^4.19.2",
     "express-rate-limit": "^7.4.0",

@@ -127,13 +127,24 @@ finished production rule.
 
 ## Session model
 
-There is no database. `pipeline/sessionStore.js` holds an in-memory
-`Map<sessionId, session>` where a session accumulates state as the analyst
-moves through the pipeline (parsed events -> field discovery -> approved
-mappings -> normalized events -> detections -> generated rules -> test
-results -> tuning). Sessions expire after 2 hours of inactivity. This is
-appropriate for a single-analyst workspace; it is not designed for
-concurrent multi-user production use without adding a real datastore.
+`pipeline/sessionStore.js` holds an in-memory `Map<sessionId, session>`
+where a session accumulates state as the analyst moves through the pipeline
+(parsed events -> field discovery -> approved mappings -> normalized events
+-> detections -> generated rules -> test results -> tuning). Sessions
+expire after 2 hours of inactivity and none of this survives a restart -
+appropriate for a single-analyst workspace, not concurrent multi-user
+production use.
+
+The one thing that *is* durable is the detection lifecycle
+(`detections/detectionLifecycle.js` + `persistence/detectionStore.js`, a
+small SQLite database). A detection's identity for lifecycle purposes is
+its `evaluator.id` (`${category}.${mitreHint}` - the detection *type*, not
+one session's specific instance of it), so approving "SSH Brute Force"
+once means every future session that flags it again sees the same
+persisted status, version, and audit history, independent of the
+inherently-ephemeral session data around it. See
+`persistence/db.js`'s module comment for why this is deliberately scoped
+to lifecycle state only, not general app persistence.
 
 ## Frontend
 

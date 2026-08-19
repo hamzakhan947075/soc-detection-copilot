@@ -13,14 +13,17 @@ const { getFpGuidance } = require('../false-positive/fpGuidance');
  * shape a future persisted DetectionStore (see ARCHITECTURE_AUDIT.md §10)
  * would store.
  *
- * Honesty note: `status` here reflects session progress (draft -> generated
- * -> tested -> tuned), not a persisted approval workflow - there is no
- * database yet, so "approved"/"production"/"deprecated" states and real
- * version history don't exist until a DetectionStore is built. Don't read
- * more into `status`/`version` than that.
+ * Honesty note: when no `persisted` context is supplied, `status` reflects
+ * session progress only (draft -> generated -> tested -> tuned) and
+ * `version` is always 1 - there's no durable lifecycle without a
+ * DetectionStore behind it. Pass `context.persisted` (a record from
+ * persistence/detectionStore.js) once a detection has actually been
+ * persisted, and its real status/version/author/history take over - that's
+ * the only way "approved"/"production"/"deprecated" become meaningful
+ * rather than a label that vanishes on restart.
  */
 function createDetectionRecord(candidate, context = {}) {
-  const { logSource = null, rule = null } = context;
+  const { logSource = null, rule = null, persisted = null } = context;
   const testResult = rule ? rule.lastTestResult || null : null;
   const fpAnalysis = rule ? rule.lastFpAnalysis || null : null;
   const tuning = context.tuning || null;
@@ -30,7 +33,7 @@ function createDetectionRecord(candidate, context = {}) {
     id: candidate.id,
     name: candidate.name,
     description: candidate.description,
-    status: deriveStatus({ rule, testResult, tuning }),
+    status: persisted ? persisted.status : deriveStatus({ rule, testResult, tuning }),
     severity: candidate.severity,
     confidence: candidate.confidence,
     dataSources: [candidate.category],
@@ -41,14 +44,17 @@ function createDetectionRecord(candidate, context = {}) {
       // The current generation of evaluators are plain functions inside
       // detection-engine/behaviors/*.js, keyed by mitreHint rather than
       // self-reporting a first-class evaluator id. This is a stable derived
-      // identifier until each behavior module reports one directly.
+      // identifier until each behavior module reports one directly. It also
+      // doubles as the persistence key (persistence/detectionStore.js) -
+      // the same detection *type* stays the same row across every session
+      // and every re-run of /detect.
       id: `${candidate.category}.${candidate.mitreHint || 'generic'}`,
       kind: candidate.ruleConditions ? 'structured' : 'heuristic',
     },
     detectionLogic: candidate.description,
     mitre: buildMitre(candidate.mitre),
-    query: (rule && rule.query) || null,
-    queryLanguage: (rule && rule.ruleType) || null,
+    query: (rule && rule.query) || (persisted && persisted.query) || null,
+    queryLanguage: (rule && rule.ruleType) || (persisted && persisted.queryLanguage) || null,
     testCases: { positive: [], negative: [], edge: [] },
     testResult,
     falsePositiveProfile: {
@@ -60,7 +66,10 @@ function createDetectionRecord(candidate, context = {}) {
       generatedAt: now,
       source: 'behavior-engine',
     },
-    version: 1,
+    version: persisted ? persisted.version : 1,
+    lifecycle: persisted
+      ? { persisted: true, author: persisted.author, createdAt: persisted.createdAt, updatedAt: persisted.updatedAt }
+      : { persisted: false },
   };
 }
 

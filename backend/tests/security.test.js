@@ -4,6 +4,7 @@ const request = require('supertest');
 const { createApp } = require('../src/app');
 const { loadSampleDataset } = require('../src/ingestion/sampleDatasets');
 const aiConfigStore = require('../src/ai/aiConfigStore');
+const detectionDb = require('../src/persistence/db');
 
 const app = createApp();
 
@@ -276,5 +277,87 @@ describe('AI field-mapping check', () => {
       .post('/api/sessions/does-not-exist/mappings/explain')
       .send({ rawField: 'username' });
     expect(res.status).toBe(404);
+  });
+});
+
+describe('Detection lifecycle API', () => {
+  beforeEach(() => {
+    detectionDb.exec('DELETE FROM detection_history; DELETE FROM detection_definitions;');
+  });
+
+  async function ingestAndDetectBruteForce() {
+    const loadRes = await request(app).post('/api/samples/ssh_auth/load');
+    const { sessionId } = loadRes.body;
+    await request(app).post(`/api/sessions/${sessionId}/normalize`);
+    const detectRes = await request(app).post(`/api/sessions/${sessionId}/detect`);
+    const bruteForce = detectRes.body.detections.find((d) => d.name.includes('Brute Force'));
+    return { sessionId, bruteForce };
+  }
+
+  test('a detection record is not persisted until explicitly persisted', async () => {
+    const { sessionId, bruteForce } = await ingestAndDetectBruteForce();
+    const notYet = await request(app).get(`/api/detections/authentication.brute_force`);
+    expect(notYet.status).toBe(404);
+
+    const record = await request(app).get(`/api/sessions/${sessionId}/detections/${bruteForce.id}/record`);
+    expect(record.body.lifecycle).toEqual({ persisted: false });
+  });
+
+  test('persisting a detection creates a durable record independent of the session', async () => {
+    const { sessionId, bruteForce } = await ingestAndDetectBruteForce();
+    const persistRes = await request(app)
+      .post(`/api/sessions/${sessionId}/detections/${bruteForce.id}/persist`)
+      .send({ author: 'alice' });
+    expect(persistRes.status).toBe(201);
+    expect(persistRes.body.status).toBe('draft');
+    expect(persistRes.body.version).toBe(1);
+    expect(persistRes.body.author).toBe('alice');
+
+    const listRes = await request(app).get('/api/detections');
+    expect(listRes.body.detections.map((d) => d.evaluatorId)).toContain('authentication.brute_force');
+
+    const record = await request(app).get(`/api/sessions/${sessionId}/detections/${bruteForce.id}/record`);
+    expect(record.body.lifecycle.persisted).toBe(true);
+  });
+
+  test('rejects approving a detection that was never tested, via the real API', async () => {
+    const { sessionId, bruteForce } = await ingestAndDetectBruteForce();
+    await request(app).post(`/api/sessions/${sessionId}/detections/${bruteForce.id}/persist`).send({});
+    const res = await request(app).post('/api/detections/authentication.brute_force/transition').send({ status: 'approved' });
+    expect(res.status).toBe(409);
+    expect(res.body.error).toMatch(/requires the detection to currently be in one of/);
+  });
+
+  test('walking the full lifecycle to production works and is durable across "sessions"', async () => {
+    const { sessionId, bruteForce } = await ingestAndDetectBruteForce();
+    await request(app).post(`/api/sessions/${sessionId}/detections/${bruteForce.id}/persist`).send({});
+
+    for (const status of ['generated', 'validated', 'tested']) {
+      const res = await request(app).post('/api/detections/authentication.brute_force/transition').send({ status });
+      expect(res.status).toBe(200);
+      expect(res.body.status).toBe(status);
+    }
+    const approved = await request(app).post('/api/detections/authentication.brute_force/transition').send({ status: 'approved', author: 'lead-analyst' });
+    expect(approved.status).toBe(200);
+    expect(approved.body.version).toBe(2);
+
+    const production = await request(app).post('/api/detections/authentication.brute_force/transition').send({ status: 'production' });
+    expect(production.body.status).toBe('production');
+    expect(production.body.version).toBe(3);
+
+    // A brand new session re-detecting the same behavior sees the same
+    // durable production status - this is the point of persisting it.
+    const secondSession = await ingestAndDetectBruteForce();
+    const record = await request(app).get(`/api/sessions/${secondSession.sessionId}/detections/${secondSession.bruteForce.id}/record`);
+    expect(record.body.status).toBe('production');
+    expect(record.body.version).toBe(3);
+
+    const historyRes = await request(app).get('/api/detections/authentication.brute_force/history');
+    expect(historyRes.body.history.map((h) => h.status)).toEqual(['draft', 'generated', 'validated', 'tested', 'approved', 'production']);
+  });
+
+  test('400s a transition request with no status', async () => {
+    const res = await request(app).post('/api/detections/authentication.brute_force/transition').send({});
+    expect(res.status).toBe(400);
   });
 });

@@ -6,7 +6,7 @@
 Take raw logs exported from Elastic — or uploaded/pasted from anywhere — and run them through a real, end-to-end detection engineering workflow: field discovery, ECS mapping, behavioral detection, MITRE ATT&CK mapping, rule generation, testing, false-positive analysis, and tuning.
 
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen)
-![Tests](https://img.shields.io/badge/tests-186%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-211%20passing-brightgreen)
 ![No build step](https://img.shields.io/badge/frontend-vanilla%20JS%2C%20no%20build%20step-blue)
 ![Deterministic core](https://img.shields.io/badge/core%20logic-deterministic-informational)
 ![Status](https://img.shields.io/badge/status-active-success)
@@ -73,6 +73,7 @@ flowchart LR
 - 🧭 **Analyst-in-the-loop ECS mapping** — every suggestion shows its confidence and reasoning, and can be overridden before normalization
 - 🕵️ **6 behavior families, 25+ individual detections** — brute force, password spraying, privileged auth, reverse shells, suspicious sudo, encoded/suspicious PowerShell, LOLBins, credential dumping, persistence (services/scheduled tasks/registry run keys/cron), port scanning, DNS tunneling, C2 beaconing, SQLi/XSS/path traversal/web shells, and firewall anomalies
 - 🧮 **Real deterministic evaluators** for the three hardest signals — CIDR internal/external direction (IPv4+IPv6, configurable ranges), DNS-tunneling entropy/length/character-distribution, and C2 beaconing timing regularity — each returns structured, explainable evidence (`detection-engine/evaluators/`), no LLM involved
+- 🗳️ **Real detection lifecycle** — draft → generated → validated → tested → tuned → approved → production → deprecated, persisted to SQLite so a decision survives a restart, with an enforced guard (e.g. you cannot approve a detection that's never been tested) and a full audit trail per detection
 - 🎯 **MITRE ATT&CK mapping** that never overstates confidence
 - 📝 **5 query languages** generated per detection: KQL, ES\|QL, EQL, Lucene, Sigma
 - ✅ **Real rule testing** — each detection carries the exact structured conditions that reproduced its own match, so "test against sample logs" reflects reality instead of a generic placeholder
@@ -96,7 +97,7 @@ To use your own data: upload a `.json` / `.jsonl` / `.ndjson` / `.txt` / `.log` 
 
 ## Deploy online
 
-The whole app is a single stateless-ish Node/Express process (in-memory sessions, 2-hour TTL, no database), so it deploys to any host that can run `node backend/src/server.js` and keep it alive. [Render](https://render.com) is the easiest free option:
+The app is a single Node/Express process. Session/pipeline data (parsed events, mappings, detections) is in-memory only, 2-hour TTL. The detection *lifecycle* (draft → ... → production) is persisted to a small SQLite file so an approval decision survives a restart - but on Render's free tier, the filesystem itself is ephemeral across deploys/restarts, same caveat as the in-memory session data (see [Environment variables](#environment-variables) for `DETECTION_DB_PATH` if you want it on a mounted persistent disk instead). It still deploys to any host that can run `node backend/src/server.js` and keep it alive. [Render](https://render.com) is the easiest free option:
 
 [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/hamzakhan947075/soc-detection-copilot)
 
@@ -112,7 +113,7 @@ Any other Node host works the same way (Railway, Fly.io, a plain VPS with `pm2`/
 
 ```bash
 cd backend
-npm test              # 186 tests across parsing, field discovery, ECS
+npm test              # 211 tests across parsing, field discovery, ECS
                        # mapping, detection engine, MITRE mapping, rule
                        # generation/validation, rule testing, false-positive
                        # analysis, tuning, AI provider config, and API/upload security
@@ -132,7 +133,8 @@ backend/
     normalization/     raw event -> normalized ECS event
     detection-engine/  behaviors/{auth,linux,windows,network,web,firewall}.js,
                        evaluators/{cidr,dnsTunneling,c2Beaconing}Evaluator.js
-    detections/        canonical Detection record (additive) + evaluator result contract
+    detections/        canonical Detection record + lifecycle state machine (draft..production)
+    persistence/       SQLite-backed detection lifecycle store (db.js, detectionStore.js)
     mitre/             static hint -> {tactic, technique} lookup
     rule-generation/   KQL/ES|QL/EQL/Lucene/Sigma builders + rule assembly
     rule-validation/   non-executing syntax validation
@@ -146,7 +148,7 @@ backend/
     pipeline/          session store + orchestration + pipeline stage metadata
     routes/            Express API
   sample-data/         8 bundled sample datasets
-  tests/               186 tests (see above)
+  tests/               211 tests (see above)
 frontend/
   js/
     api.js, state.js, controller.js, pipelineBar.js, utils.js
@@ -171,6 +173,7 @@ All optional — copy `backend/.env.example` to `backend/.env`. Nothing here is 
 | `MAX_UPLOAD_BYTES`, `MAX_PASTE_BYTES`, `MAX_EVENTS_PER_DATASET` | Upload/ingestion limits |
 | `RATE_LIMIT_WINDOW_MS`, `RATE_LIMIT_MAX` | API rate limiting |
 | `INTERNAL_CIDR_RANGES` | Comma-separated CIDR list overriding the default RFC1918/loopback/link-local ranges the CIDR evaluator treats as "internal" |
+| `DETECTION_DB_PATH` | Path to the SQLite file backing the detection lifecycle (default `backend/data/detections.sqlite`; tests always use `:memory:`) |
 | `ELASTICSEARCH_URL`, `ELASTICSEARCH_USERNAME`, `ELASTICSEARCH_PASSWORD`, `ELASTICSEARCH_API_KEY`, `ELASTICSEARCH_INDEX` | Optional direct Elasticsearch fetch (Settings tab shows connection status) |
 | `AI_PROVIDER` (`anthropic`\|`groq`\|`openai`\|`custom`), plus per-provider `ANTHROPIC_API_KEY`/`ANTHROPIC_MODEL`, `GROQ_API_KEY`/`GROQ_MODEL`, `OPENAI_API_KEY`/`OPENAI_MODEL`, or `AI_API_KEY`+`AI_BASE_URL`+`AI_MODEL` for a custom OpenAI-compatible endpoint | Optional AI-assist narrative text. Instead of env vars, a key can also be pasted into the **Settings** tab at runtime — that takes priority for the life of the running process and is never written to disk (see [Environment variables](#environment-variables) note below) |
 
@@ -191,6 +194,10 @@ The frontend talks to a REST API under `/api` — see `backend/src/routes/api.js
 | `GET /api/sessions/:id/rules/:ruleId/tune` | Get a tuning recommendation |
 | `GET /api/sessions/:id/rules/:ruleId/report?format=json\|markdown\|csv` | Export the Detection Engineering Report |
 | `GET /api/sessions/:id/dashboard` | Dashboard metrics |
+| `GET /api/sessions/:id/detections/:detectionId/record` | Canonical Detection record for one detection (session-derived status unless persisted) |
+| `POST /api/sessions/:id/detections/:detectionId/persist` | Start/refresh the durable lifecycle record for a detection (keyed by evaluator id, not the session) |
+| `GET /api/detections`, `GET /api/detections/:evaluatorId`, `GET /api/detections/:evaluatorId/history` | List/inspect persisted detections and their lifecycle audit trail |
+| `POST /api/detections/:evaluatorId/transition` | Move a persisted detection to a new lifecycle status (`{status, author, note}`) - rejected with 409 if the transition isn't valid (e.g. approving something never tested) |
 | `GET/POST /api/elasticsearch/*` | Optional direct Elasticsearch integration |
 
 ## Security
@@ -208,7 +215,7 @@ The frontend talks to a REST API under `/api` — see `backend/src/routes/api.js
 - **DNS-tunneling** (length/entropy/character-distribution/subdomain-depth, `detection-engine/evaluators/dnsTunnelingEvaluator.js`) and **C2 beaconing timing regularity** (`detection-engine/evaluators/c2BeaconingEvaluator.js`) are now real, tested, deterministic evaluators with structured evidence — but their *generated query* still can only check that the relevant field exists, because entropy/character-distribution and multi-event timing regularity genuinely cannot be expressed as a static filter in KQL/EQL/ES|QL/Lucene/Sigma (that needs a scripted field or an aggregation pipeline, not a `WHERE` clause). This is a real limitation of static query languages, not an unfinished implementation — see the inline comments in `detection-engine/behaviors/networkBehaviors.js`.
 - PDF report export is intentionally not implemented (JSON/Markdown/CSV are); a correct PDF renderer is a substantial dependency on its own.
 - Log source identification and ECS mapping are confidence-scored heuristics, not guaranteed-correct — the UI always shows confidence and reasoning, and never presents an uncertain mapping or MITRE technique as definitive.
-- There is no persistence (in-memory sessions only) and no authentication yet — see [ARCHITECTURE_AUDIT.md](ARCHITECTURE_AUDIT.md) for the full maturity assessment and roadmap.
+- **Detection lifecycle persistence is real but narrow, not general persistence.** A detection's approval/production status and version history now survive a restart via SQLite (`persistence/`) - but everything else (parsed events, mappings, normalized events, in-session detections/rules/test results) is still in-memory only, and on Render's free tier the SQLite file itself doesn't survive a deploy/spin-down unless it's on a mounted persistent disk. There is still no authentication — see [ARCHITECTURE_AUDIT.md](ARCHITECTURE_AUDIT.md) for the full maturity assessment and roadmap.
 
 ---
 

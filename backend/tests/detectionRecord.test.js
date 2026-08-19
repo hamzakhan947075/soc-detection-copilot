@@ -80,6 +80,22 @@ describe('createDetectionRecord', () => {
     expect(record.falsePositiveProfile.staticGuidance).toBeDefined();
   });
 
+  test('uses the persisted lifecycle status/version over the session-derived guess when supplied', () => {
+    const candidate = baseCandidate();
+    const persisted = { status: 'approved', version: 2, author: 'alice', query: 'event.outcome:"failure"', queryLanguage: 'kql', createdAt: '2026-08-01T00:00:00Z', updatedAt: '2026-08-19T00:00:00Z' };
+    const record = createDetectionRecord(candidate, { persisted });
+    expect(record.status).toBe('approved');
+    expect(record.version).toBe(2);
+    expect(record.query).toBe('event.outcome:"failure"');
+    expect(record.lifecycle).toEqual({ persisted: true, author: 'alice', createdAt: '2026-08-01T00:00:00Z', updatedAt: '2026-08-19T00:00:00Z' });
+  });
+
+  test('marks lifecycle as not persisted when no persisted context is supplied', () => {
+    const record = createDetectionRecord(baseCandidate());
+    expect(record.lifecycle).toEqual({ persisted: false });
+    expect(record.version).toBe(1);
+  });
+
   test('carries the log source through when supplied', () => {
     const record = createDetectionRecord(baseCandidate(), { logSource: { source: 'Linux SSH', confidence: 92 } });
     expect(record.logSource).toEqual({ source: 'Linux SSH', confidence: 92 });
