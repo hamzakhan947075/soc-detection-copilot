@@ -6,7 +6,7 @@
 Take raw logs exported from Elastic — or uploaded/pasted from anywhere — and run them through a real, end-to-end detection engineering workflow: field discovery, ECS mapping, behavioral detection, MITRE ATT&CK mapping, rule generation, testing, false-positive analysis, and tuning.
 
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen)
-![Tests](https://img.shields.io/badge/tests-120%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-125%20passing-brightgreen)
 ![No build step](https://img.shields.io/badge/frontend-vanilla%20JS%2C%20no%20build%20step-blue)
 ![Deterministic core](https://img.shields.io/badge/core%20logic-deterministic-informational)
 ![Status](https://img.shields.io/badge/status-active-success)
@@ -111,7 +111,7 @@ Any other Node host works the same way (Railway, Fly.io, a plain VPS with `pm2`/
 
 ```bash
 cd backend
-npm test              # 120 tests across parsing, field discovery, ECS
+npm test              # 125 tests across parsing, field discovery, ECS
                        # mapping, detection engine, MITRE mapping, rule
                        # generation/validation, rule testing, false-positive
                        # analysis, tuning, AI provider config, and API/upload security
@@ -143,7 +143,7 @@ backend/
     pipeline/          session store + orchestration + pipeline stage metadata
     routes/            Express API
   sample-data/         8 bundled sample datasets
-  tests/               120 tests (see above)
+  tests/               125 tests (see above)
 frontend/
   js/
     api.js, state.js, controller.js, pipelineBar.js, utils.js
