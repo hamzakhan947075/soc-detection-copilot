@@ -137,6 +137,35 @@ describe('End-to-end pipeline smoke test via API', () => {
     const testRes = await request(app).post(`/api/sessions/${sessionId}/rules/${ruleRes.body.ruleId}/test`);
     expect(testRes.body.testResult.eventsMatched).toBe(1);
   });
+
+  test('the canonical detection record reflects rule generation and test status as they happen', async () => {
+    const loadRes = await request(app).post('/api/samples/ssh_auth/load');
+    const { sessionId } = loadRes.body;
+    await request(app).post(`/api/sessions/${sessionId}/normalize`);
+    const detectRes = await request(app).post(`/api/sessions/${sessionId}/detect`);
+    const bruteForce = detectRes.body.detections.find((d) => d.name.includes('Brute Force'));
+
+    const draftRecord = await request(app).get(`/api/sessions/${sessionId}/detections/${bruteForce.id}/record`);
+    expect(draftRecord.status).toBe(200);
+    expect(draftRecord.body.status).toBe('draft');
+    expect(draftRecord.body.mitre.technique.id).toBe('T1110');
+    expect(draftRecord.body.logSource.source).toBe('Linux SSH');
+
+    const ruleRes = await request(app).post(`/api/sessions/${sessionId}/rules`).send({ detectionId: bruteForce.id, ruleType: 'kql' });
+    await request(app).post(`/api/sessions/${sessionId}/rules/${ruleRes.body.ruleId}/test`);
+
+    const testedRecord = await request(app).get(`/api/sessions/${sessionId}/detections/${bruteForce.id}/record`);
+    expect(testedRecord.body.status).toBe('tested');
+    expect(testedRecord.body.query).toBeDefined();
+    expect(testedRecord.body.testResult.eventsMatched).toBeGreaterThan(0);
+  });
+
+  test('404s for an unknown detection id', async () => {
+    const loadRes = await request(app).post('/api/samples/ssh_auth/load');
+    const { sessionId } = loadRes.body;
+    const res = await request(app).get(`/api/sessions/${sessionId}/detections/does-not-exist/record`);
+    expect(res.status).toBe(404);
+  });
 });
 
 describe('AI config API', () => {

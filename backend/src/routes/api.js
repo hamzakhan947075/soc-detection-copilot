@@ -19,6 +19,7 @@ const { buildReport, toMarkdown, toCsv } = require('../reporting/reportGenerator
 const { buildDashboard } = require('../reporting/dashboard');
 const { MITRE_LOOKUP } = require('../mitre/mitreMap');
 const { explainDetection, explainFalsePositives, suggestMappingNarrative, isEnabled: aiEnabled } = require('../ai/aiAssist');
+const { createDetectionRecord } = require('../detections/detectionRecord');
 const aiConfigStore = require('../ai/aiConfigStore');
 const { PROVIDERS } = require('../ai/providerDefaults');
 const { callProvider } = require('../ai/providers');
@@ -277,6 +278,21 @@ router.get(
     res.json(explanation);
   })
 );
+
+router.get('/sessions/:sessionId/detections/:detectionId/record', requireSession, (req, res) => {
+  const session = req.session;
+  const detection = (session.detections || []).find((d) => d.id === req.params.detectionId);
+  if (!detection) {
+    res.status(404).json({ error: 'Detection not found.' });
+    return;
+  }
+  // Most recently generated rule for this detection, if any (a session may
+  // generate more than one rule/query-language variant for the same
+  // detection; the record reflects the latest one).
+  const rule = [...session.rules.values()].filter((r) => r.detectionId === detection.id).pop() || null;
+  const record = createDetectionRecord(detection, { logSource: session.logSource, rule });
+  res.json(record);
+});
 
 // ---------- Rule generation ----------
 router.post('/sessions/:sessionId/rules', requireSession, (req, res) => {
