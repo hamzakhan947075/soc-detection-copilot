@@ -28,6 +28,13 @@ const PROVIDERS = {
     defaultModel: 'gpt-4o-mini',
     requiresBaseUrl: false,
   },
+  gemini: {
+    label: 'Google Gemini',
+    api: 'openai-chat',
+    baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
+    defaultModel: 'gemini-2.0-flash',
+    requiresBaseUrl: false,
+  },
   custom: {
     label: 'Custom (OpenAI-compatible)',
     api: 'openai-chat',
