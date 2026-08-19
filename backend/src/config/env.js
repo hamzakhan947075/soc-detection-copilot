@@ -85,7 +85,7 @@ function resolveAiEnvConfig() {
     anthropic: { apiKey: process.env.ANTHROPIC_API_KEY || '', model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-5', baseUrl: '' },
     groq: { apiKey: process.env.GROQ_API_KEY || '', model: process.env.GROQ_MODEL || 'openai/gpt-oss-120b', baseUrl: '' },
     openai: { apiKey: process.env.OPENAI_API_KEY || '', model: process.env.OPENAI_MODEL || 'gpt-4o-mini', baseUrl: '' },
-    gemini: { apiKey: process.env.GEMINI_API_KEY || '', model: process.env.GEMINI_MODEL || 'gemini-2.0-flash', baseUrl: '' },
+    gemini: { apiKey: process.env.GEMINI_API_KEY || '', model: process.env.GEMINI_MODEL || 'gemini-3.6-flash', baseUrl: '' },
     custom: { apiKey: process.env.AI_API_KEY || '', model: process.env.AI_MODEL || '', baseUrl: process.env.AI_BASE_URL || '' },
   };
 

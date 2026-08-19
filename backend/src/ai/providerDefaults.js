@@ -32,7 +32,7 @@ const PROVIDERS = {
     label: 'Google Gemini',
     api: 'openai-chat',
     baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
-    defaultModel: 'gemini-2.0-flash',
+    defaultModel: 'gemini-3.6-flash',
     requiresBaseUrl: false,
   },
   custom: {
