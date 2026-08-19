@@ -2,7 +2,7 @@
 
 const { suggestMapping } = require('../src/ecs-mapping/ecsMapper');
 const { normalizeEvent } = require('../src/normalization/normalizer');
-const { isKnownEcsField, isElasticsearchMetadataField, resolveTextMultifield } = require('../src/ecs-mapping/ecsSchema');
+const { isKnownEcsField, isElasticsearchMetadataField, resolveTextMultifield, isKnownEcsNamespace } = require('../src/ecs-mapping/ecsSchema');
 const { discoverFields } = require('../src/field-discovery/fieldDiscovery');
 
 describe('suggestMapping', () => {
@@ -30,9 +30,21 @@ describe('suggestMapping', () => {
     expect(result.status).toBe('uncertain');
   });
 
-  test('returns unmapped status for unrecognized custom fields', () => {
+  test('returns custom status for a field whose namespace is not part of ECS at all', () => {
     const result = suggestMapping('my_custom_widget_field', ['abc']);
+    expect(result.status).toBe('custom');
+    expect(result.ecsField).toBeNull();
+  });
+
+  test('returns unmapped (not custom) for a field under a real ECS namespace this app just does not carry a definition for', () => {
+    const result = suggestMapping('host.totally_unrecognized_subfield', ['abc']);
     expect(result.status).toBe('unmapped');
+    expect(result.ecsField).toBeNull();
+  });
+
+  test('returns unsupported when a name-based candidate exists but the observed values are arrays, not scalars', () => {
+    const result = suggestMapping('username', [['admin', 'root']]);
+    expect(result.status).toBe('unsupported');
     expect(result.ecsField).toBeNull();
   });
 
@@ -46,6 +58,18 @@ describe('ecsSchema', () => {
   test('recognizes canonical ECS fields', () => {
     expect(isKnownEcsField('source.ip')).toBe(true);
     expect(isKnownEcsField('totally.made.up')).toBe(false);
+  });
+
+  test('isKnownEcsNamespace recognizes a real ECS field group even when the specific sub-field is unrecognized', () => {
+    expect(isKnownEcsNamespace('host.some_subfield_we_have_not_added')).toBe(true);
+    expect(isKnownEcsNamespace('vulnerability.severity')).toBe(true); // a real ECS group with zero entries in ECS_FIELDS
+    expect(isKnownEcsNamespace('@timestamp')).toBe(true);
+  });
+
+  test('isKnownEcsNamespace rejects a namespace that is not part of ECS at all', () => {
+    expect(isKnownEcsNamespace('auth.mfa_used')).toBe(false);
+    expect(isKnownEcsNamespace('patient.mfa_enforced')).toBe(false);
+    expect(isKnownEcsNamespace('my_custom_widget_field')).toBe(false);
   });
 
   // Regression coverage for a real-world gap: a full Elastic export was
@@ -151,6 +175,15 @@ describe('suggestMapping - metadata and multi-field handling', () => {
     expect(suggestMapping('tls.version', ['TLSv1.3']).status).toBe('confident');
     expect(suggestMapping('user.email', ['a@example.com']).status).toBe('confident');
   });
+
+  test('mappingMethod records how each kind of mapping was produced', () => {
+    expect(suggestMapping('source.ip', ['10.10.10.15']).mappingMethod).toBe('exact');
+    expect(suggestMapping('host.name.text', ['server01']).mappingMethod).toBe('text_multifield');
+    expect(suggestMapping('username', ['admin']).mappingMethod).toBe('alias');
+    expect(suggestMapping('_id', ['abc']).mappingMethod).toBeNull();
+    expect(suggestMapping('auth.mfa_used', [true]).mappingMethod).toBeNull();
+    expect(suggestMapping('host.unrecognized_subfield', ['x']).mappingMethod).toBeNull();
+  });
 });
 
 describe('discoverFields - real-world Elastic export shape', () => {
@@ -169,7 +202,8 @@ describe('discoverFields - real-world Elastic export shape', () => {
         source: { ip: '10.10.10.15', geo: { country_name: 'Norway' } },
         tls: { version: 'TLSv1.3' },
         user: { name: 'admin', email: 'admin@example.com' },
-        // A genuinely custom, non-ECS application field - correctly stays unmapped.
+        // A genuinely custom, non-ECS application field - "auth" is not an
+        // ECS field group, so this correctly reports "custom", not "unmapped".
         auth: { mfa_used: true },
       },
     ];
@@ -181,7 +215,7 @@ describe('discoverFields - real-world Elastic export shape', () => {
     expect(byField['data_stream.dataset'].ecsStatus).toBe('confident');
     expect(byField['tls.version'].ecsStatus).toBe('confident');
     expect(byField['user.email'].ecsStatus).toBe('confident');
-    expect(byField['auth.mfa_used'].ecsStatus).toBe('unmapped');
+    expect(byField['auth.mfa_used'].ecsStatus).toBe('custom');
 
     const confidentCount = result.fields.filter((f) => f.ecsStatus === 'confident').length;
     expect(confidentCount).toBeGreaterThanOrEqual(10);

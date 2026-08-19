@@ -1,6 +1,6 @@
 'use strict';
 
-const { isKnownEcsField, getEcsFieldInfo, isElasticsearchMetadataField, resolveTextMultifield } = require('./ecsSchema');
+const { isKnownEcsField, getEcsFieldInfo, isElasticsearchMetadataField, resolveTextMultifield, isKnownEcsNamespace } = require('./ecsSchema');
 const { ALIASES, normalizeFieldName } = require('./aliasDictionary');
 const { inferValueType } = require('../field-discovery/valueTypes');
 
@@ -12,6 +12,27 @@ const UNCERTAIN_THRESHOLD = 0.75;
  * matching against a curated alias dictionary, validated against the actual
  * observed value types. Returns the best candidate plus any alternates, so
  * the UI can show "uncertain - analyst review required" where appropriate.
+ *
+ * `status` is one of:
+ *   confident   - a specific ECS field, high confidence (exact schema match,
+ *                 .text multi-field, or a strong alias match)
+ *   uncertain   - a specific ECS field guessed, but confidence is low -
+ *                 analyst review required before approving
+ *   custom      - not ECS at all: the field's own top-level namespace isn't
+ *                 a real ECS field group, so this is the analyst's own
+ *                 application-specific field, not a mapping gap
+ *   unsupported - a plausible ECS field name matched, but the observed
+ *                 value is an array/object rather than the scalar ECS
+ *                 expects - this mapper doesn't attempt structural
+ *                 transformation, so it's flagged rather than guessed at
+ *   excluded    - Elasticsearch's own hit metadata, never part of ECS or
+ *                 log content
+ *   unmapped    - no alias matched, but the field's namespace IS part of
+ *                 ECS - a genuine gap in this app's ECS_FIELDS subset (or a
+ *                 real ECS field this app's dictionary doesn't carry yet),
+ *                 not the same thing as "custom"
+ * `mappingMethod` records *how* a mapping was produced (independent of the
+ * confidence-based status above): 'exact' | 'text_multifield' | 'alias' | null.
  */
 function suggestMapping(rawFieldName, sampleValues = []) {
   // Case 0: Elasticsearch's own hit metadata (_id, _index, _score, ...) -
@@ -27,6 +48,7 @@ function suggestMapping(rawFieldName, sampleValues = []) {
       transformationRequired: null,
       alternates: [],
       status: 'excluded',
+      mappingMethod: null,
     };
   }
 
@@ -42,6 +64,7 @@ function suggestMapping(rawFieldName, sampleValues = []) {
       transformationRequired: false,
       alternates: [],
       status: 'confident',
+      mappingMethod: 'exact',
     };
   }
 
@@ -59,6 +82,7 @@ function suggestMapping(rawFieldName, sampleValues = []) {
       transformationRequired: false,
       alternates: [],
       status: 'confident',
+      mappingMethod: 'text_multifield',
     };
   }
 
@@ -66,19 +90,47 @@ function suggestMapping(rawFieldName, sampleValues = []) {
   const candidates = ALIASES[normalized];
 
   if (!candidates || candidates.length === 0) {
+    // Case 3: no alias candidate. Whether this is "custom" (not ECS at all)
+    // or genuinely "unmapped" (part of ECS, but a gap in this app's schema
+    // subset) depends on whether the field's own namespace is real ECS.
+    const isCustom = !isKnownEcsNamespace(rawFieldName);
     return {
       rawField: rawFieldName,
       ecsField: null,
       ecsType: null,
-      confidence: 0,
-      reason: 'No known ECS alias matches this field name; treat as a custom/non-ECS field.',
+      confidence: null,
+      reason: isCustom
+        ? `"${String(rawFieldName).split('.')[0]}" is not an ECS field group - this looks like an application-specific custom field, not an ECS mapping gap.`
+        : 'No known ECS alias matches this field name, but its namespace is part of ECS - may be a real ECS field outside this app\'s current schema subset. Review manually.',
       transformationRequired: null,
       alternates: [],
-      status: 'unmapped',
+      status: isCustom ? 'custom' : 'unmapped',
+      mappingMethod: null,
     };
   }
 
   const observedType = majorityValueType(sampleValues);
+
+  // Case 4: a name-based candidate exists, but the observed values are
+  // arrays/objects rather than the scalar value ECS expects for that field.
+  // Guessing a confidence-scored scalar mapping here would misrepresent
+  // what's actually in the data - this mapper doesn't attempt structural
+  // (array/object -> scalar) transformation, so it says so explicitly.
+  if (observedType === 'array' || observedType === 'object') {
+    const hint = candidates[0];
+    return {
+      rawField: rawFieldName,
+      ecsField: null,
+      ecsType: null,
+      confidence: null,
+      reason: `Field name suggests "${hint.ecs}", but observed values are ${observedType === 'array' ? 'arrays' : 'nested objects'}, not a scalar - this mapper does not attempt structural transformation. Review manually.`,
+      transformationRequired: null,
+      alternates: [],
+      status: 'unsupported',
+      mappingMethod: null,
+    };
+  }
+
   const scored = candidates.map((c) => scoreCandidate(c, observedType)).sort((a, b) => b.confidence - a.confidence);
 
   const best = scored[0];
@@ -94,6 +146,7 @@ function suggestMapping(rawFieldName, sampleValues = []) {
     transformationRequired: transformationNeeded(rawFieldName, best),
     alternates: alternates.map((a) => ({ ecsField: a.ecs, confidence: round2(a.confidence), reason: a.reason })),
     status,
+    mappingMethod: 'alias',
   };
 }
 

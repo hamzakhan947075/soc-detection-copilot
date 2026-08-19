@@ -9,10 +9,11 @@ function buildDashboard(session) {
   const detections = session.detections || [];
   const rules = [...session.rules.values()];
 
-  // Elasticsearch metadata fields (_id, _index, ...) are never mappable to
-  // ECS, so they're excluded from the coverage denominator rather than
-  // counted as a mapping gap.
-  const mappableFields = mappings.filter((m) => m.status !== 'excluded');
+  // Elasticsearch metadata fields (_id, _index, ...) and the analyst's own
+  // custom application fields (status "custom") are never mappable to ECS,
+  // so both are excluded from the coverage denominator rather than counted
+  // as a mapping gap.
+  const mappableFields = mappings.filter((m) => m.status !== 'excluded' && m.status !== 'custom');
   const mappedFields = mappableFields.filter((m) => m.ecsField).length;
   const mappingCoverage = mappableFields.length > 0 ? Math.round((mappedFields / mappableFields.length) * 10000) / 100 : 0;
 

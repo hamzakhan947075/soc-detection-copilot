@@ -239,6 +239,35 @@ const ECS_FIELDS = {
 const ELASTICSEARCH_METADATA_FIELDS = new Set(['_id', '_index', '_score', '_type', '_ignored', '_routing', '_seq_no', '_primary_term', '_version']);
 
 /**
+ * Every top-level field-group name defined by the real ECS specification,
+ * including groups this app's ECS_FIELDS subset above doesn't carry
+ * individual fields for yet (container, dll, email, error, faas, group,
+ * orchestrator, package, registry, vulnerability, x509, span, trace,
+ * transaction, vlan, volume, device, as, code_signature, os). This list
+ * exists purely to answer one question correctly: is an unrecognized raw
+ * field's top-level namespace *part of ECS at all*, or is it the analyst's
+ * own application-specific field? A field under a namespace here but not in
+ * ECS_FIELDS is a genuine schema-subset gap ("unmapped"); a field under a
+ * namespace that isn't here at all is someone's own custom field ("custom")
+ * - see ecsMapper.js's suggestMapping().
+ */
+const ECS_NAMESPACES = new Set([
+  'agent', 'as', 'client', 'cloud', 'code_signature', 'container', 'data_stream',
+  'destination', 'device', 'dll', 'dns', 'ecs', 'elastic_agent', 'email', 'error',
+  'event', 'faas', 'file', 'group', 'host', 'http', 'input', 'labels', 'log',
+  'message', 'network', 'observer', 'orchestrator', 'organization', 'os', 'package',
+  'process', 'registry', 'related', 'rule', 'server', 'service', 'source', 'span',
+  'tags', 'threat', 'tls', 'trace', 'tracing', 'transaction', 'url', 'user',
+  'user_agent', 'vlan', 'volume', 'vulnerability', 'x509',
+]);
+
+/** True if a raw field's top-level dotted segment is a real ECS field-group name (whether or not we carry specific sub-fields for it). */
+function isKnownEcsNamespace(field) {
+  const topLevel = String(field).split('.')[0];
+  return topLevel === '@timestamp' || ECS_NAMESPACES.has(topLevel);
+}
+
+/**
  * Kibana/ECS commonly ship a `.text` multi-field alongside a keyword/wildcard
  * field purely to support full-text search (e.g. `host.name.text` next to
  * `host.name`). These are not separate ECS fields but ARE meaningfully
@@ -272,4 +301,5 @@ module.exports = {
   getEcsFieldInfo,
   isElasticsearchMetadataField,
   resolveTextMultifield,
+  isKnownEcsNamespace,
 };

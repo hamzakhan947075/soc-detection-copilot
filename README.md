@@ -6,7 +6,7 @@
 Take raw logs exported from Elastic — or uploaded/pasted from anywhere — and run them through a real, end-to-end detection engineering workflow: field discovery, ECS mapping, behavioral detection, MITRE ATT&CK mapping, rule generation, testing, false-positive analysis, and tuning.
 
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen)
-![Tests](https://img.shields.io/badge/tests-236%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-244%20passing-brightgreen)
 ![No build step](https://img.shields.io/badge/frontend-vanilla%20JS%2C%20no%20build%20step-blue)
 ![Deterministic core](https://img.shields.io/badge/core%20logic-deterministic-informational)
 ![Status](https://img.shields.io/badge/status-active-success)
@@ -69,8 +69,8 @@ flowchart LR
 ## Features
 
 - 🗂️ **Multi-source ingestion** — file upload, paste, 8 bundled sample datasets, or a direct Elasticsearch fetch (all optional, all env-configured)
-- 🔍 **Log source identification** — Linux SSH, Windows Security, Sysmon, Apache/Nginx/IIS, firewalls (Fortinet/Palo Alto/Cisco/generic), DNS, DHCP, VPN, proxy, EDR, cloud (CloudTrail/Azure/M365), database, and custom application logs
-- 🧭 **Analyst-in-the-loop ECS mapping** — every suggestion shows its confidence and reasoning, and can be overridden before normalization
+- 🔍 **Log source identification** — Linux SSH, Windows Security, Sysmon, Apache/Nginx/IIS, firewalls (Fortinet/Palo Alto/Cisco/generic), DNS, DHCP, VPN, proxy, EDR, cloud (CloudTrail/Azure/M365), database, and custom application logs. Shows every candidate that was considered, not just the winner - uncertainty is never hidden behind a single confident-looking answer
+- 🧭 **Analyst-in-the-loop ECS mapping** — every suggestion shows its confidence and reasoning, and can be overridden before normalization. Six meaningful statuses, not just "mapped/unmapped": `confident`, `uncertain`, `custom` (a real application field - not an ECS gap), `unsupported` (array/object value, needs manual transformation), `excluded` (Elasticsearch's own metadata), `unmapped` (a genuine schema gap under a real ECS namespace) - and mapping coverage % is never penalized by an analyst's own custom fields
 - 🕵️ **6 behavior families, 25+ individual detections** — brute force, password spraying, privileged auth, reverse shells, suspicious sudo, encoded/suspicious PowerShell, LOLBins, credential dumping, persistence (services/scheduled tasks/registry run keys/cron), port scanning, DNS tunneling, C2 beaconing, SQLi/XSS/path traversal/web shells, and firewall anomalies
 - 🧮 **Real deterministic evaluators** for the three hardest signals — CIDR internal/external direction (IPv4+IPv6, configurable ranges), DNS-tunneling entropy/length/character-distribution, and C2 beaconing timing regularity — each returns structured, explainable evidence (`detection-engine/evaluators/`), no LLM involved
 - 🗳️ **Real detection lifecycle** — draft → generated → validated → tested → tuned → approved → production → deprecated, persisted to SQLite so a decision survives a restart, with an enforced guard (e.g. you cannot approve a detection that's never been tested) and a full audit trail per detection
@@ -114,7 +114,7 @@ Any other Node host works the same way (Railway, Fly.io, a plain VPS with `pm2`/
 
 ```bash
 cd backend
-npm test              # 236 tests across parsing, field discovery, ECS
+npm test              # 244 tests across parsing, field discovery, ECS
                        # mapping, detection engine, MITRE mapping, rule
                        # generation/validation, rule testing, false-positive
                        # analysis, tuning, AI provider config, and API/upload security
@@ -151,7 +151,7 @@ backend/
     pipeline/          session store + orchestration + pipeline stage metadata
     routes/            Express API
   sample-data/         8 bundled sample datasets
-  tests/               236 tests (see above)
+  tests/               244 tests (see above)
 frontend/
   js/
     api.js, state.js, controller.js, pipelineBar.js, utils.js
@@ -220,7 +220,7 @@ The frontend talks to a REST API under `/api` — see `backend/src/routes/api.js
 - PDF report export is intentionally not implemented (JSON/Markdown/CSV are); a correct PDF renderer is a substantial dependency on its own.
 - Log source identification and ECS mapping are confidence-scored heuristics, not guaranteed-correct — the UI always shows confidence and reasoning, and never presents an uncertain mapping or MITRE technique as definitive.
 - **Detection lifecycle persistence is real but narrow, not general persistence.** A detection's approval/production status and version history now survive a restart via SQLite (`persistence/`) - but everything else (parsed events, mappings, normalized events, in-session detections/rules/test results) is still in-memory only, and on Render's free tier the SQLite file itself doesn't survive a deploy/spin-down unless it's on a mounted persistent disk.
-- **The positive/negative/edge test-case framework validates a rule's own logic in isolation, not real-world coverage.** Auto-generated cases prove the rule matches what it says it matches and doesn't match an obviously different value - they cannot tell you whether the rule covers every real attacker variation, only whether its stated conditions behave as claimed. Frontend test coverage is still zero (all 236 tests are backend-only).
+- **The positive/negative/edge test-case framework validates a rule's own logic in isolation, not real-world coverage.** Auto-generated cases prove the rule matches what it says it matches and doesn't match an obviously different value - they cannot tell you whether the rule covers every real attacker variation, only whether its stated conditions behave as claimed. Frontend test coverage is still zero (all 244 tests are backend-only).
 - There is still no authentication — see [ARCHITECTURE_AUDIT.md](ARCHITECTURE_AUDIT.md) for the full maturity assessment and roadmap.
 
 ---

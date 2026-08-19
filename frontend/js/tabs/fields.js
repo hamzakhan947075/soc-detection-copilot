@@ -20,9 +20,31 @@ export async function render(container) {
     <div class="card">
       <h3>Detected Log Source</h3>
       <p><strong style="font-size:16px">${escapeHtml(ls.source)}</strong> &nbsp; ${confidenceBar((ls.confidence || 0) / 100)}</p>
-      <p class="muted"><strong>Reason:</strong> ${escapeHtml(ls.reason)}</p>
+      <p class="muted"><strong>Evidence:</strong> ${escapeHtml(ls.reason)}</p>
       ${ls.recommendedDataset ? `<p class="muted"><strong>Recommended Dataset:</strong> <code>${escapeHtml(ls.recommendedDataset)}</code></p>` : ''}
       <p class="muted"><strong>Important Fields:</strong> ${(ls.importantFields || []).map((f) => `<code>${escapeHtml(f)}</code>`).join(', ')}</p>
+      ${
+        Array.isArray(ls.candidates) && ls.candidates.length > 1
+          ? `<h3 class="section-gap">Other Possible Sources</h3>
+             <p class="muted">Log source identification is a confidence-scored heuristic, never a certainty - every candidate that was considered is shown below, not just the winner.</p>
+             <div class="table-wrap">
+               <table>
+                 <thead><tr><th>Source</th><th>Confidence</th><th>Evidence</th></tr></thead>
+                 <tbody>
+                   ${ls.candidates
+                     .map(
+                       (c) => `<tr>
+                         <td>${escapeHtml(c.source)}</td>
+                         <td>${confidenceBar((c.confidence || 0) / 100)}</td>
+                         <td class="muted">${(c.matchedReasons || []).map((r) => escapeHtml(r)).join('; ')}</td>
+                       </tr>`
+                     )
+                     .join('')}
+                 </tbody>
+               </table>
+             </div>`
+          : ''
+      }
     </div>
 
     <div class="card">
