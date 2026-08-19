@@ -18,7 +18,7 @@ const { recommendTuning } = require('../tuning/tuning');
 const { buildReport, toMarkdown, toCsv } = require('../reporting/reportGenerator');
 const { buildDashboard } = require('../reporting/dashboard');
 const { MITRE_LOOKUP } = require('../mitre/mitreMap');
-const { explainDetection, explainFalsePositives, isEnabled: aiEnabled } = require('../ai/aiAssist');
+const { explainDetection, explainFalsePositives, suggestMappingNarrative, isEnabled: aiEnabled } = require('../ai/aiAssist');
 const aiConfigStore = require('../ai/aiConfigStore');
 const { PROVIDERS } = require('../ai/providerDefaults');
 const { callProvider } = require('../ai/providers');
@@ -198,6 +198,27 @@ router.put('/sessions/:sessionId/mappings', requireSession, (req, res) => {
   req.session.stage = 'mapped';
   res.json({ mappings: sanitized });
 });
+
+router.post(
+  '/sessions/:sessionId/mappings/explain',
+  requireSession,
+  asyncHandler(async (req, res) => {
+    const { rawField, ecsField, ecsType, confidence } = req.body || {};
+    if (typeof rawField !== 'string' || !rawField.trim()) {
+      res.status(400).json({ error: '"rawField" is required.' });
+      return;
+    }
+    const fieldInfo = req.session.fieldDiscovery.fields.find((f) => f.field === rawField);
+    const result = await suggestMappingNarrative({
+      rawField,
+      ecsField: ecsField || null,
+      ecsType,
+      confidence: typeof confidence === 'number' ? confidence : fieldInfo && fieldInfo.ecsConfidence,
+      exampleValues: fieldInfo ? fieldInfo.exampleValues : undefined,
+    });
+    res.json(result);
+  })
+);
 
 // ---------- Normalization ----------
 router.post('/sessions/:sessionId/normalize', requireSession, (req, res) => {

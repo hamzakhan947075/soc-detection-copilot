@@ -153,3 +153,43 @@ describe('AI config API', () => {
     expect(cleared.body.source).not.toBe('session');
   });
 });
+
+describe('AI field-mapping check', () => {
+  test('explains a mapped field with a deterministic fallback when AI is not configured', async () => {
+    const ingestRes = await request(app).post('/api/samples/ssh_auth/load');
+    const sessionId = ingestRes.body.sessionId;
+
+    const res = await request(app)
+      .post(`/api/sessions/${sessionId}/mappings/explain`)
+      .send({ rawField: 'username', ecsField: 'user.name', ecsType: 'keyword', confidence: 0.9 });
+    expect(res.status).toBe(200);
+    expect(res.body.source).toBe('deterministic');
+    expect(res.body.text).toMatch(/username/);
+  });
+
+  test('explains an unmapped field without a raw ECS field name', async () => {
+    const ingestRes = await request(app).post('/api/samples/ssh_auth/load');
+    const sessionId = ingestRes.body.sessionId;
+
+    const res = await request(app)
+      .post(`/api/sessions/${sessionId}/mappings/explain`)
+      .send({ rawField: 'totally_custom_field', ecsField: null });
+    expect(res.status).toBe(200);
+    expect(res.body.text).toMatch(/custom/i);
+  });
+
+  test('rejects a request missing rawField', async () => {
+    const ingestRes = await request(app).post('/api/samples/ssh_auth/load');
+    const sessionId = ingestRes.body.sessionId;
+
+    const res = await request(app).post(`/api/sessions/${sessionId}/mappings/explain`).send({});
+    expect(res.status).toBe(400);
+  });
+
+  test('404s for an unknown session', async () => {
+    const res = await request(app)
+      .post('/api/sessions/does-not-exist/mappings/explain')
+      .send({ rawField: 'username' });
+    expect(res.status).toBe(404);
+  });
+});

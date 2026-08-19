@@ -36,7 +36,7 @@ export async function render(container) {
       <p class="muted">Review each suggested mapping. Fields below 75% confidence are marked <span class="badge uncertain">uncertain</span> and need analyst review before approval.</p>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Raw Field</th><th>ECS Field</th><th>ECS Type</th><th>Confidence</th><th>Status</th></tr></thead>
+          <thead><tr><th>Raw Field</th><th>ECS Field</th><th>ECS Type</th><th>Confidence</th><th>Status</th><th>AI Check</th></tr></thead>
           <tbody id="mappingBody">
             ${state.mappings.map((m, i) => mappingRow(m, i)).join('')}
           </tbody>
@@ -68,6 +68,10 @@ function mergeWithFieldList(suggested, allFields) {
 }
 
 function mappingRow(m, i) {
+  const aiCell =
+    m.status === 'excluded'
+      ? '<span class="muted">-</span>'
+      : `<button class="ai-check-btn" data-index="${i}">${state.aiEnabled ? '✨ Check with AI' : '✨ Check (deterministic)'}</button>`;
   return `<tr data-index="${i}">
     <td class="mono">${escapeHtml(m.rawField)}</td>
     <td><input type="text" class="mono ecs-field-input" data-index="${i}" value="${escapeHtml(m.ecsField || '')}" placeholder="e.g. source.ip" /></td>
@@ -78,7 +82,9 @@ function mappingRow(m, i) {
     </td>
     <td>${m.ecsField ? confidenceBar(m.confidence || 0) : '<span class="muted">-</span>'}</td>
     <td>${statusBadge(m.status)}</td>
-  </tr>`;
+    <td>${aiCell}</td>
+  </tr>
+  <tr class="ai-explain-row" data-explain-for="${i}" style="display:none"><td colspan="6"></td></tr>`;
 }
 
 function wireEvents(container) {
@@ -97,6 +103,32 @@ function wireEvents(container) {
     });
   });
 
+  container.querySelectorAll('.ai-check-btn').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const i = Number(btn.dataset.index);
+      const m = state.mappings[i];
+      const row = container.querySelector(`tr.ai-explain-row[data-explain-for="${i}"]`);
+      const cell = row.querySelector('td');
+      row.style.display = '';
+      cell.className = 'muted';
+      cell.textContent = 'Thinking…';
+      try {
+        const result = await api.explainMapping(state.sessionId, {
+          rawField: m.rawField,
+          ecsField: m.ecsField,
+          ecsType: m.ecsType,
+          confidence: m.confidence,
+        });
+        const label = result.source === 'ai' ? '✨ AI' : 'Deterministic summary';
+        cell.innerHTML = `<strong>${escapeHtml(label)}:</strong> ${escapeHtml(result.text)}`;
+      } catch (err) {
+        cell.textContent = '';
+        row.style.display = 'none';
+        setStatus(err.message, true);
+      }
+    });
+  });
+
   container.querySelector('#approveBtn').addEventListener('click', async () => {
     setStatus('Approving mappings and normalizing…');
     try {
@@ -112,8 +144,8 @@ function wireEvents(container) {
 }
 
 function renderRowBadge(container, i) {
-  const row = container.querySelector(`tr[data-index="${i}"] td:last-child`);
-  if (row) row.innerHTML = statusBadge(state.mappings[i].status);
+  const cell = container.querySelector(`tr[data-index="${i}"] td:nth-child(5)`);
+  if (cell) cell.innerHTML = statusBadge(state.mappings[i].status);
 }
 
 function renderNormalizedPreview(container) {

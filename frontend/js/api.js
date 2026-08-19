@@ -51,6 +51,12 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ mappings }),
     }).then(handle),
+  explainMapping: (id, mapping) =>
+    fetch(`${BASE}/sessions/${id}/mappings/explain`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(mapping),
+    }).then(handle),
   normalize: (id) => fetch(`${BASE}/sessions/${id}/normalize`, { method: 'POST' }).then(handle),
   getNormalizedSample: (id) => fetch(`${BASE}/sessions/${id}/normalized/sample`).then(handle),
 

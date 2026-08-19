@@ -36,26 +36,28 @@ async function explainDetection(detection) {
   }
 }
 
-/** Suggests an interpretation for a low-confidence / uncertain ECS mapping. */
+/** Suggests an interpretation for a low-confidence, unmapped, or uncertain ECS mapping. */
 async function suggestMappingNarrative(fieldMapping) {
+  const { rawField, ecsField, confidence, exampleValues } = fieldMapping;
+  const examplesText = Array.isArray(exampleValues) && exampleValues.length ? ` Example value(s): ${JSON.stringify(exampleValues.slice(0, 3))}.` : '';
+
+  const fallbackText = ecsField
+    ? `Field "${rawField}" has an uncertain ECS mapping (${Math.round((confidence || 0) * 100)}% confidence). Analyst review required.`
+    : `Field "${rawField}" has no ECS candidate. It may be a custom application field, or the ECS schema dictionary may not yet cover it - review manually.`;
+
   if (!isEnabled()) {
-    return {
-      source: 'deterministic',
-      text: `Field "${fieldMapping.rawField}" has an uncertain ECS mapping (${Math.round(fieldMapping.confidence * 100)}% confidence). Analyst review required.`,
-    };
+    return { source: 'deterministic', text: fallbackText };
   }
   try {
-    const prompt = `A raw log field named "${fieldMapping.rawField}" was tentatively mapped to ECS field "${fieldMapping.ecsField}" with ${Math.round(
-      fieldMapping.confidence * 100
-    )}% confidence. In one sentence, note what an analyst should double check before approving this mapping.`;
+    const prompt = ecsField
+      ? `A raw log field named "${rawField}" was tentatively mapped to ECS field "${ecsField}" with ${Math.round(
+          (confidence || 0) * 100
+        )}% confidence.${examplesText} In one sentence, note what an analyst should double check before approving this mapping.`
+      : `A raw log field named "${rawField}" from a security log could not be automatically mapped to any ECS (Elastic Common Schema) field.${examplesText} In one or two sentences, suggest the most likely ECS field it should map to (if any), or state that it is likely a custom, non-ECS field. Do not invent an ECS field name that does not exist in the real ECS spec.`;
     const text = await ask(prompt, { maxTokens: 150 });
     return { source: 'ai', text };
   } catch (err) {
-    return {
-      source: 'deterministic-fallback',
-      text: `Field "${fieldMapping.rawField}" has an uncertain ECS mapping. Analyst review required.`,
-      error: err.message,
-    };
+    return { source: 'deterministic-fallback', text: fallbackText, error: err.message };
   }
 }
 
