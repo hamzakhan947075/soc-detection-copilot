@@ -54,10 +54,19 @@ function renderTuning(container, tuning) {
       <p class="section-gap">${escapeHtml(tuning.reason)}</p>
       ${
         tuning.after
-          ? `<div class="two-col section-gap">
-              <div class="stat-card"><div class="stat-value">${tuning.before.eventsMatched}</div><div class="stat-label">Matches Before Tuning</div></div>
-              <div class="stat-card"><div class="stat-value">${tuning.after.eventsMatched}</div><div class="stat-label">Matches After Tuning</div></div>
-            </div>`
+          ? `<div class="grid grid-4 section-gap">
+              <div class="stat-card"><div class="stat-value">${tuning.before.eventsMatched}</div><div class="stat-label">Matches Before</div></div>
+              <div class="stat-card"><div class="stat-value">${tuning.after.eventsMatched}</div><div class="stat-label">Matches After</div></div>
+              <div class="stat-card"><div class="stat-value">${escapeHtml(tuning.before.falsePositiveRatePercent)}%</div><div class="stat-label">FP Rate Before</div></div>
+              <div class="stat-card"><div class="stat-value">${tuning.after.falsePositiveRatePercent !== null ? escapeHtml(tuning.after.falsePositiveRatePercent) + '%' : 'not verified'}</div><div class="stat-label">FP Rate After</div></div>
+            </div>
+            ${
+              tuning.verifiedImprovement === true
+                ? `<div class="ok-box section-gap">Verified: the false-positive rate dropped ${escapeHtml(tuning.falsePositiveRateReductionPercent ?? '?')}% and is now within the acceptable ceiling.</div>`
+                : tuning.verifiedImprovement === false
+                  ? `<div class="warn-box section-gap">Improved but not fully verified: the false-positive rate dropped but is still above the acceptable ceiling - consider a further increase.</div>`
+                  : ''
+            }`
           : ''
       }
       <button class="primary section-gap" id="toReportBtn">Continue to Reports &rarr;</button>

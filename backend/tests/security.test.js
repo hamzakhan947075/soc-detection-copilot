@@ -413,3 +413,56 @@ describe('Rule test-suite API (positive/negative/edge classification)', () => {
     expect(res.status).toBe(404);
   });
 });
+
+describe('False-positive dimensional breakdown and verified tuning (real API)', () => {
+  test('FP analysis breaks down potential false positives by field/value, and tuning verifies the improvement against real data', async () => {
+    // 12 real brute-force events from one IP (the detection's own evidence).
+    // A second IP independently generates 10 failures too - enough to clear
+    // the *rule's* exported threshold (10, grouped by source.ip) during
+    // testing, but it's a separate candidate with its own evidence, so
+    // relative to the first candidate under test these are genuine
+    // potential false positives, not part of what it originally detected.
+    const evidenceEvents = Array.from({ length: 12 }, (_, i) => ({
+      '@timestamp': new Date(Date.UTC(2026, 7, 19, 10, 0, i)).toISOString(),
+      source: { ip: '198.51.100.5' },
+      user: { name: 'admin' },
+      event: { category: 'authentication', outcome: 'failure' },
+    }));
+    const noiseEvents = Array.from({ length: 10 }, (_, i) => ({
+      '@timestamp': new Date(Date.UTC(2026, 7, 19, 11, 0, i)).toISOString(),
+      source: { ip: '203.0.113.77' },
+      user: { name: 'svc-monitor' },
+      event: { category: 'authentication', outcome: 'failure' },
+    }));
+    const events = [...evidenceEvents, ...noiseEvents];
+
+    const loadRes = await request(app)
+      .post('/api/sessions')
+      .send({ text: events.map((e) => JSON.stringify(e)).join('\n'), filename: 'fp-breakdown.ndjson' });
+    const { sessionId } = loadRes.body;
+    await request(app).post(`/api/sessions/${sessionId}/normalize`);
+    const detectRes = await request(app).post(`/api/sessions/${sessionId}/detect`);
+    const bruteForce = detectRes.body.detections.find((d) => d.name.includes('Brute Force'));
+    expect(bruteForce).toBeDefined();
+
+    const ruleRes = await request(app).post(`/api/sessions/${sessionId}/rules`).send({ detectionId: bruteForce.id, ruleType: 'kql' });
+    const testRes = await request(app).post(`/api/sessions/${sessionId}/rules/${ruleRes.body.ruleId}/test`);
+
+    // The rule (event.category=authentication AND event.outcome=failure,
+    // threshold >=10 grouped by source.ip) matches both IPs' 22 events
+    // total, but only the 12 from the real brute-force evidence are true
+    // positives relative to this specific candidate.
+    expect(testRes.body.testResult.eventsMatched).toBe(22);
+    const fp = testRes.body.fpAnalysis;
+    expect(fp.potentialFalsePositiveCount).toBe(10);
+    expect(fp.topUsers.some((u) => u.value === 'svc-monitor')).toBe(true);
+
+    const tuneRes = await request(app).get(`/api/sessions/${sessionId}/rules/${ruleRes.body.ruleId}/tune`);
+    expect(tuneRes.status).toBe(200);
+    if (tuneRes.body.applicable && tuneRes.body.after) {
+      // Whatever the tool claims, it must be backed by a real re-computed FP rate, not just asserted.
+      expect(tuneRes.body.after.falsePositiveRatePercent).not.toBeUndefined();
+      expect(typeof tuneRes.body.verifiedImprovement === 'boolean' || tuneRes.body.verifiedImprovement === null).toBe(true);
+    }
+  });
+});

@@ -296,7 +296,7 @@ router.get('/sessions/:sessionId/detections/:detectionId/record', requireSession
   const rule = [...session.rules.values()].filter((r) => r.detectionId === detection.id).pop() || null;
   const evaluatorId = `${detection.category}.${detection.mitreHint || 'generic'}`;
   const persisted = detectionStore.get(evaluatorId);
-  const record = createDetectionRecord(detection, { logSource: session.logSource, rule, persisted });
+  const record = createDetectionRecord(detection, { logSource: session.logSource, rule, persisted, tuning: rule && rule.lastTuning });
   res.json(record);
 });
 
@@ -490,8 +490,10 @@ router.get('/sessions/:sessionId/rules/:ruleId/tune', requireSession, (req, res)
     res.status(409).json({ error: 'Rule has not been tested yet. Call POST /test first.' });
     return;
   }
-  const tuning = recommendTuning(rule, rule.lastFpAnalysis, session.normalizedEvents);
+  const detection = (session.detections || []).find((d) => d.id === rule.detectionId);
+  const tuning = recommendTuning(rule, rule.lastFpAnalysis, session.normalizedEvents, detection);
   rule.tuningRecommendations = tuning.applicable ? [tuning.reason] : [];
+  rule.lastTuning = tuning;
   session.stage = 'tuned';
   res.json(tuning);
 });

@@ -107,7 +107,7 @@ function buildMitre(mitre) {
 }
 
 function deriveStatus({ rule, testResult, tuning }) {
-  if (tuning) return 'tuned';
+  if (tuning && tuning.applicable) return 'tuned';
   if (testResult) return 'tested';
   if (rule) return 'generated';
   return 'draft';
