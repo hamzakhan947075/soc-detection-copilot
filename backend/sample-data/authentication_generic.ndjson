@@ -1,0 +1,7 @@
+{"@timestamp":"2026-08-19T11:23:20.000Z","username":"alice","src_ip":"198.51.100.10","action":"login","status":"failure","event":{"dataset":"authentication"}}
+{"@timestamp":"2026-08-19T11:23:23.000Z","username":"bob","src_ip":"198.51.100.10","action":"login","status":"failure","event":{"dataset":"authentication"}}
+{"@timestamp":"2026-08-19T11:23:26.000Z","username":"carol","src_ip":"198.51.100.10","action":"login","status":"failure","event":{"dataset":"authentication"}}
+{"@timestamp":"2026-08-19T11:23:29.000Z","username":"dave","src_ip":"198.51.100.10","action":"login","status":"failure","event":{"dataset":"authentication"}}
+{"@timestamp":"2026-08-19T11:23:32.000Z","username":"erin","src_ip":"198.51.100.10","action":"login","status":"failure","event":{"dataset":"authentication"}}
+{"@timestamp":"2026-08-19T11:23:35.000Z","username":"frank","src_ip":"198.51.100.10","action":"login","status":"failure","event":{"dataset":"authentication"}}
+{"@timestamp":"2026-08-19T11:23:38.000Z","username":"grace","src_ip":"198.51.100.10","action":"login","status":"failure","event":{"dataset":"authentication"}}

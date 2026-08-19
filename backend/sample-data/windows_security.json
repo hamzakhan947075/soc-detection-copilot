@@ -1,0 +1,417 @@
+[
+  {
+    "@timestamp": "2026-08-19T10:16:40.000Z",
+    "message": "An account failed to log on.",
+    "host": {
+      "name": "DC01"
+    },
+    "winlog": {
+      "event_id": 4625,
+      "channel": "Security",
+      "event_data": {
+        "TargetUserName": "Administrator",
+        "IpAddress": "203.0.113.77"
+      }
+    },
+    "event": {
+      "dataset": "windows.security",
+      "module": "security",
+      "outcome": "failure",
+      "action": "logon-failed"
+    },
+    "source": {
+      "ip": "203.0.113.77"
+    },
+    "user": {
+      "target": {
+        "name": "Administrator"
+      }
+    }
+  },
+  {
+    "@timestamp": "2026-08-19T10:16:45.000Z",
+    "message": "An account failed to log on.",
+    "host": {
+      "name": "DC01"
+    },
+    "winlog": {
+      "event_id": 4625,
+      "channel": "Security",
+      "event_data": {
+        "TargetUserName": "Administrator",
+        "IpAddress": "203.0.113.77"
+      }
+    },
+    "event": {
+      "dataset": "windows.security",
+      "module": "security",
+      "outcome": "failure",
+      "action": "logon-failed"
+    },
+    "source": {
+      "ip": "203.0.113.77"
+    },
+    "user": {
+      "target": {
+        "name": "Administrator"
+      }
+    }
+  },
+  {
+    "@timestamp": "2026-08-19T10:16:50.000Z",
+    "message": "An account failed to log on.",
+    "host": {
+      "name": "DC01"
+    },
+    "winlog": {
+      "event_id": 4625,
+      "channel": "Security",
+      "event_data": {
+        "TargetUserName": "Administrator",
+        "IpAddress": "203.0.113.77"
+      }
+    },
+    "event": {
+      "dataset": "windows.security",
+      "module": "security",
+      "outcome": "failure",
+      "action": "logon-failed"
+    },
+    "source": {
+      "ip": "203.0.113.77"
+    },
+    "user": {
+      "target": {
+        "name": "Administrator"
+      }
+    }
+  },
+  {
+    "@timestamp": "2026-08-19T10:16:55.000Z",
+    "message": "An account failed to log on.",
+    "host": {
+      "name": "DC01"
+    },
+    "winlog": {
+      "event_id": 4625,
+      "channel": "Security",
+      "event_data": {
+        "TargetUserName": "Administrator",
+        "IpAddress": "203.0.113.77"
+      }
+    },
+    "event": {
+      "dataset": "windows.security",
+      "module": "security",
+      "outcome": "failure",
+      "action": "logon-failed"
+    },
+    "source": {
+      "ip": "203.0.113.77"
+    },
+    "user": {
+      "target": {
+        "name": "Administrator"
+      }
+    }
+  },
+  {
+    "@timestamp": "2026-08-19T10:17:00.000Z",
+    "message": "An account failed to log on.",
+    "host": {
+      "name": "DC01"
+    },
+    "winlog": {
+      "event_id": 4625,
+      "channel": "Security",
+      "event_data": {
+        "TargetUserName": "Administrator",
+        "IpAddress": "203.0.113.77"
+      }
+    },
+    "event": {
+      "dataset": "windows.security",
+      "module": "security",
+      "outcome": "failure",
+      "action": "logon-failed"
+    },
+    "source": {
+      "ip": "203.0.113.77"
+    },
+    "user": {
+      "target": {
+        "name": "Administrator"
+      }
+    }
+  },
+  {
+    "@timestamp": "2026-08-19T10:17:05.000Z",
+    "message": "An account failed to log on.",
+    "host": {
+      "name": "DC01"
+    },
+    "winlog": {
+      "event_id": 4625,
+      "channel": "Security",
+      "event_data": {
+        "TargetUserName": "Administrator",
+        "IpAddress": "203.0.113.77"
+      }
+    },
+    "event": {
+      "dataset": "windows.security",
+      "module": "security",
+      "outcome": "failure",
+      "action": "logon-failed"
+    },
+    "source": {
+      "ip": "203.0.113.77"
+    },
+    "user": {
+      "target": {
+        "name": "Administrator"
+      }
+    }
+  },
+  {
+    "@timestamp": "2026-08-19T10:17:10.000Z",
+    "message": "An account failed to log on.",
+    "host": {
+      "name": "DC01"
+    },
+    "winlog": {
+      "event_id": 4625,
+      "channel": "Security",
+      "event_data": {
+        "TargetUserName": "Administrator",
+        "IpAddress": "203.0.113.77"
+      }
+    },
+    "event": {
+      "dataset": "windows.security",
+      "module": "security",
+      "outcome": "failure",
+      "action": "logon-failed"
+    },
+    "source": {
+      "ip": "203.0.113.77"
+    },
+    "user": {
+      "target": {
+        "name": "Administrator"
+      }
+    }
+  },
+  {
+    "@timestamp": "2026-08-19T10:17:15.000Z",
+    "message": "An account failed to log on.",
+    "host": {
+      "name": "DC01"
+    },
+    "winlog": {
+      "event_id": 4625,
+      "channel": "Security",
+      "event_data": {
+        "TargetUserName": "Administrator",
+        "IpAddress": "203.0.113.77"
+      }
+    },
+    "event": {
+      "dataset": "windows.security",
+      "module": "security",
+      "outcome": "failure",
+      "action": "logon-failed"
+    },
+    "source": {
+      "ip": "203.0.113.77"
+    },
+    "user": {
+      "target": {
+        "name": "Administrator"
+      }
+    }
+  },
+  {
+    "@timestamp": "2026-08-19T10:17:20.000Z",
+    "message": "An account failed to log on.",
+    "host": {
+      "name": "DC01"
+    },
+    "winlog": {
+      "event_id": 4625,
+      "channel": "Security",
+      "event_data": {
+        "TargetUserName": "Administrator",
+        "IpAddress": "203.0.113.77"
+      }
+    },
+    "event": {
+      "dataset": "windows.security",
+      "module": "security",
+      "outcome": "failure",
+      "action": "logon-failed"
+    },
+    "source": {
+      "ip": "203.0.113.77"
+    },
+    "user": {
+      "target": {
+        "name": "Administrator"
+      }
+    }
+  },
+  {
+    "@timestamp": "2026-08-19T10:17:25.000Z",
+    "message": "An account failed to log on.",
+    "host": {
+      "name": "DC01"
+    },
+    "winlog": {
+      "event_id": 4625,
+      "channel": "Security",
+      "event_data": {
+        "TargetUserName": "Administrator",
+        "IpAddress": "203.0.113.77"
+      }
+    },
+    "event": {
+      "dataset": "windows.security",
+      "module": "security",
+      "outcome": "failure",
+      "action": "logon-failed"
+    },
+    "source": {
+      "ip": "203.0.113.77"
+    },
+    "user": {
+      "target": {
+        "name": "Administrator"
+      }
+    }
+  },
+  {
+    "@timestamp": "2026-08-19T10:17:30.000Z",
+    "message": "An account failed to log on.",
+    "host": {
+      "name": "DC01"
+    },
+    "winlog": {
+      "event_id": 4625,
+      "channel": "Security",
+      "event_data": {
+        "TargetUserName": "Administrator",
+        "IpAddress": "203.0.113.77"
+      }
+    },
+    "event": {
+      "dataset": "windows.security",
+      "module": "security",
+      "outcome": "failure",
+      "action": "logon-failed"
+    },
+    "source": {
+      "ip": "203.0.113.77"
+    },
+    "user": {
+      "target": {
+        "name": "Administrator"
+      }
+    }
+  },
+  {
+    "@timestamp": "2026-08-19T10:17:35.000Z",
+    "message": "An account failed to log on.",
+    "host": {
+      "name": "DC01"
+    },
+    "winlog": {
+      "event_id": 4625,
+      "channel": "Security",
+      "event_data": {
+        "TargetUserName": "Administrator",
+        "IpAddress": "203.0.113.77"
+      }
+    },
+    "event": {
+      "dataset": "windows.security",
+      "module": "security",
+      "outcome": "failure",
+      "action": "logon-failed"
+    },
+    "source": {
+      "ip": "203.0.113.77"
+    },
+    "user": {
+      "target": {
+        "name": "Administrator"
+      }
+    }
+  },
+  {
+    "@timestamp": "2026-08-19T10:18:20.000Z",
+    "message": "An account was successfully logged on.",
+    "host": {
+      "name": "DC01"
+    },
+    "winlog": {
+      "event_id": 4624,
+      "channel": "Security",
+      "event_data": {
+        "TargetUserName": "Administrator",
+        "IpAddress": "203.0.113.77"
+      }
+    },
+    "event": {
+      "dataset": "windows.security",
+      "module": "security",
+      "outcome": "success",
+      "action": "logon-success"
+    },
+    "source": {
+      "ip": "203.0.113.77"
+    },
+    "user": {
+      "target": {
+        "name": "Administrator"
+      }
+    }
+  },
+  {
+    "@timestamp": "2026-08-19T10:20:00.000Z",
+    "message": "A new process has been created. New Process Name: C:\\Windows\\System32\\schtasks.exe CommandLine: schtasks /create /tn Updater /tr C:\\temp\\evil.exe /sc onlogon",
+    "host": {
+      "name": "DC01"
+    },
+    "winlog": {
+      "event_id": 4688,
+      "channel": "Security"
+    },
+    "event": {
+      "dataset": "windows.security",
+      "module": "security",
+      "category": "process"
+    },
+    "process": {
+      "name": "schtasks.exe",
+      "command_line": "schtasks /create /tn Updater /tr C:\\temp\\evil.exe /sc onlogon"
+    }
+  },
+  {
+    "@timestamp": "2026-08-19T10:20:50.000Z",
+    "message": "A new service was installed in the system.",
+    "host": {
+      "name": "DC01"
+    },
+    "winlog": {
+      "event_id": 7045,
+      "channel": "System"
+    },
+    "event": {
+      "dataset": "windows.security",
+      "module": "security"
+    },
+    "process": {
+      "command_line": "sc create BackdoorSvc binPath= C:\\temp\\evil.exe"
+    }
+  }
+]

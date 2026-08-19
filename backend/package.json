@@ -1,0 +1,27 @@
+{
+  "name": "soc-detection-copilot-backend",
+  "version": "1.0.0",
+  "description": "SOC Detection Copilot - backend API for ingesting raw Elastic logs and running them through ECS mapping, detection engineering, MITRE mapping, rule generation and validation.",
+  "private": true,
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "test": "jest --runInBand",
+    "test:coverage": "jest --runInBand --coverage"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.19.2",
+    "express-rate-limit": "^7.4.0",
+    "helmet": "^7.1.0",
+    "multer": "^2.0.1"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "supertest": "^7.0.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

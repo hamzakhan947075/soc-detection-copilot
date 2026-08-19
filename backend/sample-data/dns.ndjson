@@ -1,0 +1,7 @@
+{"@timestamp":"2026-08-19T11:06:40.000Z","source":{"ip":"10.0.0.30"},"dns":{"question":{"name":"www.example.com","type":"A"}},"event":{"dataset":"network.dns"}}
+{"@timestamp":"2026-08-19T11:06:45.000Z","source":{"ip":"10.0.0.30"},"dns":{"question":{"name":"www.example.com","type":"A"}},"event":{"dataset":"network.dns"}}
+{"@timestamp":"2026-08-19T11:06:50.000Z","source":{"ip":"10.0.0.30"},"dns":{"question":{"name":"www.example.com","type":"A"}},"event":{"dataset":"network.dns"}}
+{"@timestamp":"2026-08-19T11:06:55.000Z","source":{"ip":"10.0.0.30"},"dns":{"question":{"name":"www.example.com","type":"A"}},"event":{"dataset":"network.dns"}}
+{"@timestamp":"2026-08-19T11:08:20.000Z","source":{"ip":"10.0.0.30"},"dns":{"question":{"name":"aG9zdG5hbWVzZWNyZXRkYXRhZXhmaWw.evil-tunnel.example","type":"TXT"}},"event":{"dataset":"network.dns"}}
+{"@timestamp":"2026-08-19T11:08:25.000Z","source":{"ip":"10.0.0.30"},"dns":{"question":{"name":"bXNzcWxleGVjcGF5bG9hZGJhc2U2NA.evil-tunnel.example","type":"TXT"}},"event":{"dataset":"network.dns"}}
+{"@timestamp":"2026-08-19T11:08:30.000Z","source":{"ip":"10.0.0.30"},"dns":{"question":{"name":"c2VjcmV0dG9rZW5kYXRhc3RyZWFtMTIz.evil-tunnel.example","type":"TXT"}},"event":{"dataset":"network.dns"}}
