@@ -131,7 +131,10 @@ Respond with ONLY a JSON array (no markdown fences, no prose), where each item h
 
 If you cannot find any real pattern worth flagging in this sample, respond with an empty JSON array: []`;
 
-  const text = await ask(prompt, { maxTokens: 2000 });
+  // At most 5 short JSON objects come back - 1200 completion tokens is
+  // generous for that and leaves more of a low-TPM free tier's budget
+  // (e.g. Groq's 8000 TPM) for the prompt itself.
+  const text = await ask(prompt, { maxTokens: 1200 });
   const jsonText = extractJsonArray(text);
   let parsed;
   try {

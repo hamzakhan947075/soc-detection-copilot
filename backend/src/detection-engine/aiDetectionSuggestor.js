@@ -9,8 +9,17 @@ const { suggestDetectionPatterns } = require('../ai/aiAssist');
 const VALID_CATEGORIES = ['authentication', 'linux', 'windows', 'network', 'web', 'firewall'];
 const FALLBACK_CATEGORY = 'ai-suggested';
 const VALID_SEVERITIES = ['low', 'medium', 'high', 'critical'];
-const MAX_SAMPLE_EVENTS = 30;
-const MAX_FIELD_VALUE_LENGTH = 200;
+const MAX_SAMPLE_EVENTS = 12;
+const MAX_FIELD_VALUE_LENGTH = 100;
+const MAX_PROMPT_FIELDS = 80;
+// A hard ceiling on the *serialized* sample size, not just the event count -
+// a small number of field-rich events (e.g. Windows Sysmon's long command
+// lines/hashes/registry paths across dozens of fields) can still blow past
+// a low-TPM free tier even at MAX_SAMPLE_EVENTS. ~4 chars/token is a rough
+// but standard heuristic; this budgets for roughly 3000 prompt tokens from
+// the sample alone, leaving headroom under something like Groq's free-tier
+// 8000 TPM once the surrounding prompt text and completion tokens are added.
+const MAX_SAMPLE_CHARS = 12000;
 const MAX_ACCEPTED_CANDIDATES = 8;
 const MAX_CONDITIONS_PER_CANDIDATE = 3;
 const MIN_REAL_MATCHES = 1;
@@ -20,8 +29,12 @@ const MIN_REAL_MATCHES = 1;
  * real ECS field names present in this dataset (so the AI is told exactly
  * what it's allowed to reference) and a capped sample of the actual
  * flattened normalized events (so it can react to real values, not guess
- * generically). Long string values are truncated to keep token usage and
- * accidental over-sharing of large blobs bounded.
+ * generically). Long string values are truncated, the sample stops growing
+ * once its serialized size crosses MAX_SAMPLE_CHARS (regardless of how many
+ * events that took), and the field list shown to the model is capped
+ * separately from `fields` - the full, real field set still used to
+ * validate the AI's response, so a field this function chose not to spend
+ * tokens advertising is still safely rejected if the model invents it.
  */
 function buildDatasetSummary(normalizedEvents) {
   const flattened = normalizedEvents.map((e) => flattenEvent(e));
@@ -29,14 +42,20 @@ function buildDatasetSummary(normalizedEvents) {
   for (const flat of flattened) {
     for (const field of Object.keys(flat)) fieldSet.add(field);
   }
+  const fields = [...fieldSet].sort();
 
   const step = Math.max(1, Math.floor(flattened.length / MAX_SAMPLE_EVENTS));
   const sampleEvents = [];
+  let sampleChars = 0;
   for (let i = 0; i < flattened.length && sampleEvents.length < MAX_SAMPLE_EVENTS; i += step) {
-    sampleEvents.push(truncateValues(flattened[i]));
+    const truncated = truncateValues(flattened[i]);
+    const size = JSON.stringify(truncated).length;
+    if (sampleChars + size > MAX_SAMPLE_CHARS && sampleEvents.length > 0) break; // always keep at least one event
+    sampleEvents.push(truncated);
+    sampleChars += size;
   }
 
-  return { fields: [...fieldSet].sort(), sampleEvents, flattened };
+  return { fields, fieldsForPrompt: fields.slice(0, MAX_PROMPT_FIELDS), sampleEvents, flattened };
 }
 
 function truncateValues(flat) {
@@ -122,11 +141,15 @@ function slugify(name) {
  * reaches session.detections on the strength of the AI's own say-so alone.
  */
 async function suggestAiDetections(normalizedEvents) {
-  const { fields, sampleEvents, flattened } = buildDatasetSummary(normalizedEvents);
+  const { fields, fieldsForPrompt, sampleEvents, flattened } = buildDatasetSummary(normalizedEvents);
+  // Validation always uses the full real field set, even though the prompt
+  // itself only advertises a capped subset (fieldsForPrompt) to save
+  // tokens - a field the AI was never told about but still, correctly,
+  // never mentions doesn't need to be in the allowlist we send it.
   const knownFields = new Set(fields);
 
   const raw = await suggestDetectionPatterns({
-    fields,
+    fields: fieldsForPrompt,
     sampleEvents,
     validCategories: VALID_CATEGORIES,
     validMitreHints: Object.keys(MITRE_LOOKUP),

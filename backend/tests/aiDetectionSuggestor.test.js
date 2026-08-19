@@ -2,7 +2,7 @@
 
 const http = require('http');
 const aiConfigStore = require('../src/ai/aiConfigStore');
-const { suggestAiDetections, sanitizeCandidate, sanitizeCondition } = require('../src/detection-engine/aiDetectionSuggestor');
+const { suggestAiDetections, sanitizeCandidate, sanitizeCondition, buildDatasetSummary } = require('../src/detection-engine/aiDetectionSuggestor');
 
 function startServer(handler) {
   return new Promise((resolve) => {
@@ -77,6 +77,42 @@ describe('aiDetectionSuggestor - deterministic sanitizers', () => {
   test('sanitizeCandidate requires both a name and a description', () => {
     expect(sanitizeCandidate({ description: 'y', ruleConditions: [{ field: 'user.name', value: 'admin' }] }, knownFields)).toBeNull();
     expect(sanitizeCandidate({ name: 'x', ruleConditions: [{ field: 'user.name', value: 'admin' }] }, knownFields)).toBeNull();
+  });
+});
+
+describe('buildDatasetSummary - keeps the prompt bounded regardless of dataset shape', () => {
+  test('caps the serialized sample size even for events with many long field values (e.g. Sysmon-shaped data)', () => {
+    // Regression: a real user hit a Groq 413 ("Request too large... TPM
+    // Limit 8000, Requested 29632") because a field-rich dataset made the
+    // sample size scale with field richness, not just event count. 40
+    // events x 25 fields x 300-char values would previously have produced
+    // a huge prompt; the byte-budget cap must still hold it well under
+    // MAX_SAMPLE_CHARS regardless of how field-rich the source data is.
+    const richEvents = Array.from({ length: 40 }, (_, i) => {
+      const event = { '@timestamp': `2026-01-01T00:00:${String(i).padStart(2, '0')}Z` };
+      for (let f = 0; f < 25; f++) {
+        event[`process.field_${f}`] = 'x'.repeat(300);
+      }
+      return event;
+    });
+
+    const { sampleEvents } = buildDatasetSummary(richEvents);
+    const serializedSize = JSON.stringify(sampleEvents).length;
+    expect(serializedSize).toBeLessThan(15000); // MAX_SAMPLE_CHARS (12000) plus one event's worth of slack
+    expect(sampleEvents.length).toBeGreaterThan(0); // always keeps at least one event, even if it alone is large
+  });
+
+  test('truncates individual long string values', () => {
+    const events = [{ 'process.command_line': 'a'.repeat(500) }];
+    const { sampleEvents } = buildDatasetSummary(events);
+    expect(sampleEvents[0]['process.command_line'].length).toBeLessThan(150);
+  });
+
+  test('caps the field list shown to the model separately from the full validation allowlist', () => {
+    const events = [Object.fromEntries(Array.from({ length: 150 }, (_, i) => [`field_${i}`, 'v']))];
+    const { fields, fieldsForPrompt } = buildDatasetSummary(events);
+    expect(fields.length).toBe(150); // full set, used for validation
+    expect(fieldsForPrompt.length).toBeLessThanOrEqual(80); // capped subset actually sent to the model
   });
 });
 
