@@ -1,5 +1,5 @@
 import { api } from '../api.js';
-import { state } from '../state.js';
+import { state, setStatus } from '../state.js';
 import { escapeHtml } from '../utils.js';
 
 export const id = 'mitre';
@@ -42,20 +42,25 @@ export async function render(container) {
     </div>
   `;
 
-  const dict = await api.getMitre();
-  const rows = Object.entries(dict.techniques)
-    .map(
-      ([hint, t]) => `<tr>
+  try {
+    const dict = await api.getMitre();
+    const rows = Object.entries(dict.techniques)
+      .map(
+        ([hint, t]) => `<tr>
         <td class="mono">${escapeHtml(hint)}</td>
         <td class="mono">${escapeHtml(t.techniqueId)}</td>
         <td>${escapeHtml(t.techniqueName)}</td>
         <td>${escapeHtml(t.tacticId)} - ${escapeHtml(t.tacticName)}</td>
         <td>${Math.round(t.confidence * 100)}%</td>
       </tr>`
-    )
-    .join('');
-  container.querySelector('#mitreDict').innerHTML = `<table>
+      )
+      .join('');
+    container.querySelector('#mitreDict').innerHTML = `<table>
     <thead><tr><th>Internal Hint</th><th>Technique ID</th><th>Technique</th><th>Tactic</th><th>Base Confidence</th></tr></thead>
     <tbody>${rows}</tbody>
   </table>`;
+  } catch (err) {
+    setStatus(err.message, true);
+    container.querySelector('#mitreDict').innerHTML = `<div class="error-box">${escapeHtml(err.message)}</div>`;
+  }
 }

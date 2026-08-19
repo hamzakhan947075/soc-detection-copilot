@@ -8,12 +8,6 @@ export function escapeHtml(value) {
     .replace(/'/g, '&#39;');
 }
 
-export function el(html) {
-  const template = document.createElement('template');
-  template.innerHTML = html.trim();
-  return template.content.firstElementChild;
-}
-
 export function severityBadge(severity) {
   const s = String(severity || 'low').toLowerCase();
   return `<span class="badge ${escapeHtml(s)}">${escapeHtml(s.toUpperCase())}</span>`;
@@ -29,7 +23,3 @@ export function statusBadge(status) {
   return `<span class="badge ${escapeHtml(s)}">${escapeHtml(s)}</span>`;
 }
 
-export function fmtPct(n) {
-  if (n === null || n === undefined || Number.isNaN(n)) return 'N/A';
-  return `${n}%`;
-}

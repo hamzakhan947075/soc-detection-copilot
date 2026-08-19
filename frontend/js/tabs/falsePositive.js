@@ -89,7 +89,7 @@ export async function render(container) {
       const label = explanation.source === 'ai' ? '✨ AI' : 'Deterministic summary';
       box.innerHTML = `<strong>${escapeHtml(label)}:</strong> ${escapeHtml(explanation.text)}`;
     } catch (err) {
-      box.textContent = '';
+      box.innerHTML = `<div class="error-box">${escapeHtml(err.message)}</div>`;
       setStatus(err.message, true);
     }
   });

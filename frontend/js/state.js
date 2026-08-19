@@ -15,17 +15,6 @@ export const state = {
   aiEnabled: false,
 };
 
-const listeners = new Set();
-
-export function subscribe(fn) {
-  listeners.add(fn);
-  return () => listeners.delete(fn);
-}
-
-export function notify() {
-  listeners.forEach((fn) => fn(state));
-}
-
 export function setStatus(message, isError) {
   const el = document.getElementById('statusMessage');
   if (!el) return;

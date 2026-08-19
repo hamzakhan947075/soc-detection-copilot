@@ -133,6 +133,13 @@ Both run in CI (`.github/workflows/ci.yml`) on every push/PR, on Node 18.x
 and 20.x, alongside a `npm audit --audit-level=high` dependency check and a
 smoke test that actually boots the server and hits `/health`/`/ready`.
 
+```bash
+cd frontend
+npm test              # 38 tests (Node's built-in test runner + jsdom, no
+                       # bundler) covering utils.js, state.js's resolveStage,
+                       # api.js's error-handling contract, and pipelineBar.js
+```
+
 ## Project layout
 
 ```
@@ -180,6 +187,7 @@ frontend/
                        ATT&CK, Rule Builder, Rule Testing, False Positive
                        Analysis, Detection Tuning, Investigation, Reports,
                        Settings
+  tests/                 38 unit tests for the pure/testable frontend layer (Node's built-in test runner + jsdom)
   index.html, styles.css   dark SOC/SIEM-styled UI, no build step
 ARCHITECTURE.md         data flow, design rationale, security posture
 ```
@@ -250,7 +258,8 @@ The frontend talks to a REST API under `/api` — see `backend/src/routes/api.js
 - PDF report export is intentionally not implemented (JSON/Markdown/CSV are); a correct PDF renderer is a substantial dependency on its own.
 - Log source identification and ECS mapping are confidence-scored heuristics, not guaranteed-correct — the UI always shows confidence and reasoning, and never presents an uncertain mapping or MITRE technique as definitive.
 - **Detection lifecycle persistence is real but narrow, not general persistence.** A detection's approval/production status and version history now survive a restart via SQLite (`persistence/`) - but everything else (parsed events, mappings, normalized events, in-session detections/rules/test results) is still in-memory only, and on Render's free tier the SQLite file itself doesn't survive a deploy/spin-down unless it's on a mounted persistent disk.
-- **The positive/negative/edge test-case framework validates a rule's own logic in isolation, not real-world coverage.** Auto-generated cases prove the rule matches what it says it matches and doesn't match an obviously different value - they cannot tell you whether the rule covers every real attacker variation, only whether its stated conditions behave as claimed. Frontend test coverage is still zero (all 313 tests are backend-only).
+- **The positive/negative/edge test-case framework validates a rule's own logic in isolation, not real-world coverage.** Auto-generated cases prove the rule matches what it says it matches and doesn't match an obviously different value - they cannot tell you whether the rule covers every real attacker variation, only whether its stated conditions behave as claimed.
+- **Frontend test coverage is real but narrow.** 38 unit tests (`frontend/tests/`, Node's built-in test runner + jsdom, no bundler) cover the pure/testable layer - `escapeHtml`/badge helpers, `resolveStage`'s pipeline-stage ladder, `api.js`'s error-taxonomy contract, and the pipeline-bar's done/current classification. The 13 tab modules' DOM rendering itself is not covered by an automated test - it's been verified by hand against the running server, not by an automated browser/E2E suite (none exists yet).
 - **Authentication is real but intentionally minimal**: one shared password (`APP_PASSWORD`), not per-analyst accounts - there's no username, no audit trail of *who* approved a detection beyond the free-text `author` field callers can set on their own, and no way to revoke a single session early (no server-side session table to delete from) short of changing `SESSION_SECRET`, which invalidates every session at once including your own, or waiting out the 12-hour TTL. This is a deliberate scope boundary for a single-analyst tool, not an oversight - see [ARCHITECTURE_AUDIT.md](ARCHITECTURE_AUDIT.md) for the full maturity assessment and roadmap.
 
 ---

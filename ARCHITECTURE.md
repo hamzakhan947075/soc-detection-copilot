@@ -190,6 +190,35 @@ store and an `api.js` fetch wrapper. Every place that inserts
 externally-derived text (log fields, messages) into the DOM goes through
 `escapeHtml()` in `utils.js` first.
 
+## Frontend
+
+Plain ES modules, no build step, no framework - `frontend/js/app.js` wires
+up 13 tab modules (`frontend/js/tabs/*.js`) against a small `state.js`
+store and an `api.js` fetch wrapper. Every tab that calls the API on a
+button click or on initial render catches the failure and shows an
+in-body `error-box` with the sanitized message (not just the footer status
+line) - this was inconsistent across tabs until it was audited and
+unified; a few call sites (e.g. an AI-explanation panel, an ECS-mapping
+"check with AI" cell) show the error inside the same element that would
+otherwise have shown the result, rather than silently clearing it.
+`api.js`'s `handle()` is the single place that turns a non-2xx response
+into a thrown `Error`, carrying the server's message plus any extra body
+fields (`code`, `retryable`) as properties - `getReport()`'s non-JSON
+branch (markdown/CSV export) used to bypass this and could hand a failed
+request's raw response text to the caller as if it were a valid report;
+it now throws like every other call.
+
+`frontend/tests/` (Node's built-in test runner + `jsdom`, no bundler -
+these run the exact same `.js` files the browser loads) covers the
+pure/testable layer: `escapeHtml`/`severityBadge`/`statusBadge`/
+`confidenceBar`, `state.js`'s `resolveStage()` pipeline-stage ladder and
+its DOM-writing `setStatus`/`setSessionLabel`, `api.js`'s error-taxonomy
+contract (including the `getReport` fix above), and `pipelineBar.js`'s
+done/current/upcoming classification. The 13 tab modules' own DOM
+rendering has no automated coverage yet - no browser/E2E test runner is
+wired up - so that layer is still verified by hand against the running
+server, not by CI.
+
 ## Observability
 
 `observability/requestLogger.js` is the first middleware mounted in

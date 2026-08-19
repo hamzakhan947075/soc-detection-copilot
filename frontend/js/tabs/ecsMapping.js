@@ -15,8 +15,14 @@ export async function render(container) {
   }
 
   if (!state.mappings) {
-    const suggested = await api.getSuggestedMappings(state.sessionId);
-    state.mappings = mergeWithFieldList(suggested.mappings, state.fieldDiscovery.fields);
+    try {
+      const suggested = await api.getSuggestedMappings(state.sessionId);
+      state.mappings = mergeWithFieldList(suggested.mappings, state.fieldDiscovery.fields);
+    } catch (err) {
+      setStatus(err.message, true);
+      container.innerHTML = `<div class="card"><h1>ECS Mapping</h1><div class="error-box">${escapeHtml(err.message)}</div></div>`;
+      return;
+    }
   }
 
   container.innerHTML = `
@@ -127,8 +133,8 @@ function wireEvents(container) {
         const label = result.source === 'ai' ? '✨ AI' : 'Deterministic summary';
         cell.innerHTML = `<strong>${escapeHtml(label)}:</strong> ${escapeHtml(result.text)}`;
       } catch (err) {
-        cell.textContent = '';
-        row.style.display = 'none';
+        cell.className = '';
+        cell.innerHTML = `<div class="error-box">${escapeHtml(err.message)}</div>`;
         setStatus(err.message, true);
       }
     });
@@ -144,6 +150,8 @@ function wireEvents(container) {
       renderNormalizedPreview(container);
     } catch (err) {
       setStatus(err.message, true);
+      const preview = container.querySelector('#normalizedPreview');
+      if (preview) preview.innerHTML = `<div class="card section-gap"><div class="error-box">${escapeHtml(err.message)}</div></div>`;
     }
   });
 }

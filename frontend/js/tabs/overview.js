@@ -1,5 +1,5 @@
 import { api } from '../api.js';
-import { state } from '../state.js';
+import { state, setStatus } from '../state.js';
 import { escapeHtml } from '../utils.js';
 
 export const id = 'overview';
@@ -19,7 +19,14 @@ export async function render(container) {
     return;
   }
 
-  const dashboard = await api.getDashboard(state.sessionId);
+  let dashboard;
+  try {
+    dashboard = await api.getDashboard(state.sessionId);
+  } catch (err) {
+    setStatus(err.message, true);
+    container.innerHTML = `<div class="card"><h1>Detection Dashboard</h1><div class="error-box">${escapeHtml(err.message)}</div></div>`;
+    return;
+  }
   const cards = [
     ['Logs Processed', dashboard.logsProcessed],
     ['Unique Fields', dashboard.uniqueFields],

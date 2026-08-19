@@ -6,7 +6,14 @@ export const id = 'settings';
 export const label = 'Settings';
 
 export async function render(container) {
-  const [ai, providers, es] = await Promise.all([api.getAiStatus(), api.getAiProviders(), api.esStatus()]);
+  let ai, providers, es;
+  try {
+    [ai, providers, es] = await Promise.all([api.getAiStatus(), api.getAiProviders(), api.esStatus()]);
+  } catch (err) {
+    setStatus(err.message, true);
+    container.innerHTML = `<div class="card"><h1>Settings</h1><div class="error-box">${escapeHtml(err.message)}</div></div>`;
+    return;
+  }
 
   container.innerHTML = `
     <h1>Settings</h1>
@@ -132,6 +139,7 @@ function wireEvents(container, providers) {
       setStatus('AI configuration saved for this session.');
     } catch (err) {
       setStatus(err.message, true);
+      container.querySelector('#aiTestResult').innerHTML = `<div class="error-box">${escapeHtml(err.message)}</div>`;
     }
   });
 
@@ -163,6 +171,7 @@ function wireEvents(container, providers) {
       }
     } catch (err) {
       setStatus(err.message, true);
+      container.querySelector('#aiTestResult').innerHTML = `<div class="error-box">${escapeHtml(err.message)}</div>`;
     }
   });
 }

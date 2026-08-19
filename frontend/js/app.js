@@ -91,7 +91,7 @@ function renderLoginScreen(content, onSuccess) {
       await api.login(password);
       onSuccess();
     } catch (err) {
-      errorEl.innerHTML = `<div class="error-box">${err.message}</div>`;
+      errorEl.innerHTML = `<div class="error-box">${escapeForDisplay(err.message)}</div>`;
     }
   };
   content.querySelector('#loginBtn').addEventListener('click', submit);

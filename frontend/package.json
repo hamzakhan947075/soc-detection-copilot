@@ -1,0 +1,13 @@
+{
+  "name": "soc-detection-copilot-frontend",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Unit tests for the SOC Detection Copilot frontend (plain ES modules, no build step - these tests run the same source files unmodified, via Node's built-in test runner).",
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/**/*.test.js"
+  },
+  "devDependencies": {
+    "jsdom": "^25.0.1"
+  }
+}

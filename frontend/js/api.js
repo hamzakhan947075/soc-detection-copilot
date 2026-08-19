@@ -89,7 +89,12 @@ export const api = {
   getRules: (id) => fetch(`${BASE}/sessions/${id}/rules`).then(handle),
   testRule: (id, ruleId) => fetch(`${BASE}/sessions/${id}/rules/${ruleId}/test`, { method: 'POST' }).then(handle),
   tuneRule: (id, ruleId) => fetch(`${BASE}/sessions/${id}/rules/${ruleId}/tune`).then(handle),
-  getReport: (id, ruleId, format) => fetch(`${BASE}/sessions/${id}/rules/${ruleId}/report?format=${format}`).then((res) => (format === 'json' ? handle(res) : res.text())),
+  getReport: (id, ruleId, format) =>
+    fetch(`${BASE}/sessions/${id}/rules/${ruleId}/report?format=${format}`).then((res) => {
+      if (format === 'json') return handle(res);
+      if (!res.ok) throw new Error(`Request failed with status ${res.status}`);
+      return res.text();
+    }),
 
   getDashboard: (id) => fetch(`${BASE}/sessions/${id}/dashboard`).then(handle),
 

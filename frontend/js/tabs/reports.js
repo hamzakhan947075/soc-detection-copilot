@@ -13,7 +13,14 @@ export async function render(container) {
     return;
   }
 
-  const report = await api.getReport(state.sessionId, rule.ruleId, 'json');
+  let report;
+  try {
+    report = await api.getReport(state.sessionId, rule.ruleId, 'json');
+  } catch (err) {
+    setStatus(err.message, true);
+    container.innerHTML = `<div class="card"><h1>Detection Engineering Report</h1><div class="error-box">${escapeHtml(err.message)}</div></div>`;
+    return;
+  }
 
   container.innerHTML = `
     <h1>Detection Engineering Report</h1>
@@ -35,6 +42,7 @@ export async function render(container) {
         <button id="exportMd">Export Markdown</button>
         <button id="exportCsv">Export CSV</button>
       </div>
+      <div id="exportResult" class="section-gap"></div>
     </div>
 
     <div class="card">
@@ -63,6 +71,8 @@ export async function render(container) {
       setStatus(`Exported ${filename}.`);
     } catch (err) {
       setStatus(err.message, true);
+      const exportResultEl = container.querySelector('#exportResult');
+      if (exportResultEl) exportResultEl.innerHTML = `<div class="error-box">${escapeHtml(err.message)}</div>`;
     }
   }
 }
