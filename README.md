@@ -1,29 +1,82 @@
-# SOC Detection Copilot
+<div align="center">
 
-A practical **SOC Analyst / Detection Engineer workspace**: take raw logs
-exported from Elastic (or uploaded/pasted from anywhere), and run them
-through a real end-to-end detection engineering workflow -
+# 🛡️ SOC Detection Copilot
 
+**A practical SOC Analyst / Detection Engineer workspace.**
+Take raw logs exported from Elastic — or uploaded/pasted from anywhere — and run them through a real, end-to-end detection engineering workflow: field discovery, ECS mapping, behavioral detection, MITRE ATT&CK mapping, rule generation, testing, false-positive analysis, and tuning.
+
+![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen)
+![Tests](https://img.shields.io/badge/tests-86%20passing-brightgreen)
+![No build step](https://img.shields.io/badge/frontend-vanilla%20JS%2C%20no%20build%20step-blue)
+![Deterministic core](https://img.shields.io/badge/core%20logic-deterministic-informational)
+![Status](https://img.shields.io/badge/status-active-success)
+
+</div>
+
+---
+
+This is **not** a generic "paste logs, get an AI answer" tool. Every calculation that can be deterministic *is* deterministic — parsing, ECS confidence scoring, detection thresholds, MITRE mapping, rule syntax validation, statistics. An LLM is only ever used, optionally, for supplementary narrative text, and every one of those code paths has a deterministic fallback.
+
+## Table of contents
+
+- [The pipeline](#the-pipeline)
+- [Features](#features)
+- [Quick start](#quick-start)
+- [Running tests](#running-tests)
+- [Project layout](#project-layout)
+- [Environment variables](#environment-variables)
+- [API](#api)
+- [Security](#security)
+- [Known limitations](#known-limitations-stated-honestly-not-hidden)
+
+## The pipeline
+
+```mermaid
+flowchart LR
+    A[Raw Logs] --> B[Parsing]
+    B --> C[Field Discovery]
+    C --> D[ECS Mapping]
+    D --> E[Normalization]
+    E --> F[Detection Engineering]
+    F --> G[MITRE ATT&CK Mapping]
+    G --> H[Rule Generation]
+    H --> I[Rule Validation]
+    I --> J[Rule Testing]
+    J --> K[False Positive Analysis]
+    K --> L[Tuning]
+    L --> M[✅ Production-Ready Detection]
+
+    style A fill:#0f1520,stroke:#2dd4bf,color:#e6edf3
+    style M fill:#164e47,stroke:#2dd4bf,color:#e6edf3
 ```
-Raw Logs
-  -> Parsing (format detection, safe JSON/NDJSON/CSV parsing)
-  -> Field Discovery (types, frequency, null %, security relevance)
-  -> ECS Mapping (deterministic confidence-scored suggestions, analyst-editable)
-  -> Normalization (raw event -> normalized ECS event, side-by-side diff)
-  -> Detection Engineering (auth / linux / windows / network / web / firewall behaviors)
-  -> MITRE ATT&CK Mapping (static, explainable, uncertainty always flagged)
-  -> Rule Generation (KQL / ES|QL / EQL / Lucene / Sigma)
-  -> Rule Validation (syntax-checked, never executed against a live system)
-  -> Rule Testing (against your own loaded logs - real match counts)
-  -> False Positive Analysis (potential FPs cross-checked against evidence)
-  -> Tuning (threshold recommendation with before/after re-test)
-  -> Production-Ready Detection (exportable JSON/Markdown/CSV report)
-```
 
-This is not a generic "paste logs, get an AI answer" tool. Every calculation
-that can be deterministic *is* deterministic (parsing, ECS confidence,
-detection thresholds, MITRE mapping, rule syntax validation, statistics);
-an LLM is only ever used, optionally, for supplementary narrative text.
+| Stage | What happens |
+|---|---|
+| **Parsing** | Format detection (JSON / NDJSON / CSV / plain-text), safe bounded parsing — no `eval` |
+| **Field Discovery** | Types, frequency, null %, security relevance for every field in the dataset |
+| **ECS Mapping** | Deterministic, confidence-scored field → ECS suggestions, fully analyst-editable |
+| **Normalization** | Raw event → normalized ECS event, with a side-by-side diff |
+| **Detection Engineering** | Auth / Linux / Windows / network / web / firewall behavior analysis |
+| **MITRE ATT&CK Mapping** | Static, explainable lookup — uncertainty is always flagged, never hidden |
+| **Rule Generation** | KQL / ES\|QL / EQL / Lucene / Sigma, built from the detection's own match logic |
+| **Rule Validation** | Syntax-checked — never executed against a live system by this tool |
+| **Rule Testing** | Run against your own loaded logs for real match counts |
+| **False Positive Analysis** | Potential FPs cross-checked against the detection's own evidence |
+| **Tuning** | Threshold recommendation with a real before/after re-test |
+| **Report** | Exportable JSON / Markdown / CSV Detection Engineering Report |
+
+## Features
+
+- 🗂️ **Multi-source ingestion** — file upload, paste, 8 bundled sample datasets, or a direct Elasticsearch fetch (all optional, all env-configured)
+- 🔍 **Log source identification** — Linux SSH, Windows Security, Sysmon, Apache/Nginx/IIS, firewalls (Fortinet/Palo Alto/Cisco/generic), DNS, DHCP, VPN, proxy, EDR, cloud (CloudTrail/Azure/M365), database, and custom application logs
+- 🧭 **Analyst-in-the-loop ECS mapping** — every suggestion shows its confidence and reasoning, and can be overridden before normalization
+- 🕵️ **6 behavior families, 25+ individual detections** — brute force, password spraying, privileged auth, reverse shells, suspicious sudo, encoded/suspicious PowerShell, LOLBins, credential dumping, persistence (services/scheduled tasks/registry run keys/cron), port scanning, DNS tunneling, C2 beaconing, SQLi/XSS/path traversal/web shells, and firewall anomalies
+- 🎯 **MITRE ATT&CK mapping** that never overstates confidence
+- 📝 **5 query languages** generated per detection: KQL, ES\|QL, EQL, Lucene, Sigma
+- ✅ **Real rule testing** — each detection carries the exact structured conditions that reproduced its own match, so "test against sample logs" reflects reality instead of a generic placeholder
+- 📊 **SOC-style dashboard** — logs processed, mapping coverage, detections, rules validated, MITRE technique count, high-risk findings
+- 🌓 **Dark SOC/SIEM-themed UI** — 13 tabs, no build step, no framework
+- 🔒 **Security-first**: upload allowlisting/size limits, bounded JSON parsing, catastrophic-backtracking-safe regexes, escaped/validated (never executed) query generation, rate limiting, and env-var-only secrets
 
 ## Quick start
 
@@ -34,15 +87,9 @@ cp .env.example .env      # optional - the app works with no configuration
 npm start                 # -> http://localhost:4000
 ```
 
-Open `http://localhost:4000`, go to **Log Ingestion**, and click one of the
-**sample dataset** chips (SSH, Windows Security, Sysmon, Apache, Nginx,
-Firewall, DNS, generic Authentication) to run the full pipeline without
-needing an Elastic cluster.
+Open `http://localhost:4000`, go to **Log Ingestion**, and click one of the **sample dataset** chips (SSH, Windows Security, Sysmon, Apache, Nginx, Firewall, DNS, generic Authentication) to run the full pipeline without needing an Elastic cluster.
 
-To use your own data: upload a `.json` / `.jsonl` / `.ndjson` / `.txt` /
-`.log` / `.csv` file, or paste raw events directly. The app does **not**
-assume your logs are already ECS-compliant, and understands common Elastic
-export shapes (`message`, `event.original`, `log.original`).
+To use your own data: upload a `.json` / `.jsonl` / `.ndjson` / `.txt` / `.log` / `.csv` file, or paste raw events directly. The app does **not** assume your logs are already ECS-compliant, and understands common Elastic export shapes (`message`, `event.original`, `log.original`).
 
 ## Running tests
 
@@ -93,14 +140,11 @@ frontend/
 ARCHITECTURE.md         data flow, design rationale, security posture
 ```
 
-See [ARCHITECTURE.md](ARCHITECTURE.md) for the full data-flow diagram and
-design rationale (in particular, why rule generation is keyed off a
-per-detection `ruleConditions` field rather than a generic lookup table).
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the full data-flow diagram and design rationale (in particular, why rule generation is keyed off a per-detection `ruleConditions` field rather than a generic lookup table).
 
 ## Environment variables
 
-All optional - copy `backend/.env.example` to `backend/.env`. Nothing here
-is required to run the full pipeline against uploaded/pasted/sample data.
+All optional — copy `backend/.env.example` to `backend/.env`. Nothing here is required to run the full pipeline against uploaded/pasted/sample data.
 
 | Variable | Purpose |
 |---|---|
@@ -112,8 +156,7 @@ is required to run the full pipeline against uploaded/pasted/sample data.
 
 ## API
 
-The frontend talks to a REST API under `/api` - see `backend/src/routes/api.js`
-for the full list. Key endpoints:
+The frontend talks to a REST API under `/api` — see `backend/src/routes/api.js` for the full list. Key endpoints:
 
 | Method & Path | Purpose |
 |---|---|
@@ -133,14 +176,22 @@ for the full list. Key endpoints:
 ## Security
 
 - Upload validation: extension allowlist (`.json .jsonl .ndjson .txt .log .csv`), size limits, MIME sanity check. Nothing uploaded is ever executed.
-- All JSON parsing is size- and depth-bounded before `JSON.parse` - never `eval`.
+- All JSON parsing is size- and depth-bounded before `JSON.parse` — never `eval`.
 - Regexes are hand-reviewed for catastrophic-backtracking safety.
-- Generated queries are built from an escaped, structured condition list and syntax-validated - never executed against a live system by this tool.
+- Generated queries are built from an escaped, structured condition list and syntax-validated — never executed against a live system by this tool.
 - Helmet security headers, per-IP rate limiting, generic (non-leaking) error responses.
 - Elasticsearch/AI credentials come only from environment variables, never hardcoded, never logged.
 
 ## Known limitations (stated honestly, not hidden)
 
-- A handful of detections (CIDR-based internal/external traffic, DNS-tunneling entropy/length, C2 beaconing timing regularity) can't be fully expressed by the simplified `{field, value}` rule-condition model; their generated queries are a documented starting point, not a finished production rule - see the inline comments in `detection-engine/behaviors/`.
+- A handful of detections (CIDR-based internal/external traffic, DNS-tunneling entropy/length, C2 beaconing timing regularity) can't be fully expressed by the simplified `{field, value}` rule-condition model; their generated queries are a documented starting point, not a finished production rule — see the inline comments in `detection-engine/behaviors/`.
 - PDF report export is intentionally not implemented (JSON/Markdown/CSV are); a correct PDF renderer is a substantial dependency on its own.
-- Log source identification and ECS mapping are confidence-scored heuristics, not guaranteed-correct - the UI always shows confidence and reasoning, and never presents an uncertain mapping or MITRE technique as definitive.
+- Log source identification and ECS mapping are confidence-scored heuristics, not guaranteed-correct — the UI always shows confidence and reasoning, and never presents an uncertain mapping or MITRE technique as definitive.
+
+---
+
+<div align="center">
+
+Built as a real detection engineering workflow, not a chatbot wrapper.
+
+</div>
