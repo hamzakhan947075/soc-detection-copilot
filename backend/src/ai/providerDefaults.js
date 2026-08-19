@@ -18,7 +18,7 @@ const PROVIDERS = {
     label: 'Groq',
     api: 'openai-chat',
     baseUrl: 'https://api.groq.com/openai/v1',
-    defaultModel: 'llama-3.3-70b-versatile',
+    defaultModel: 'openai/gpt-oss-120b',
     requiresBaseUrl: false,
   },
   openai: {

@@ -55,6 +55,32 @@ function buildRequest(settings, prompt, maxTokens) {
   };
 }
 
+/**
+ * Best-effort extraction of the provider's own error message (e.g. "model
+ * decommissioned", "invalid api key") so failures are diagnosable instead of
+ * a bare status code. This only ever reads the provider's response body -
+ * never anything from our own request (API key, headers) - so it's safe to
+ * surface to the analyst.
+ */
+async function extractErrorDetail(res) {
+  let text;
+  try {
+    text = await res.text();
+  } catch (_err) {
+    return '';
+  }
+  if (!text) return '';
+  let detail = text;
+  try {
+    const parsed = JSON.parse(text);
+    detail = (parsed.error && (parsed.error.message || parsed.error.code || parsed.error)) || parsed.message || text;
+  } catch (_err) {
+    // not JSON - use the raw text as-is
+  }
+  detail = String(detail).trim().slice(0, 300);
+  return detail ? `: ${detail}` : '';
+}
+
 /** Extracts the reply text from a provider's response JSON shape. */
 function parseResponseText(provider, json) {
   const meta = getProviderMeta(provider);
@@ -80,7 +106,7 @@ async function callProvider(settings, prompt, { maxTokens = 400 } = {}) {
   }
 
   if (!res.ok) {
-    throw new Error(`AI provider request failed with status ${res.status}`);
+    throw new Error(`AI provider request failed with status ${res.status}${await extractErrorDetail(res)}`);
   }
 
   const json = await res.json();

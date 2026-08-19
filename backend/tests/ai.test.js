@@ -16,7 +16,7 @@ describe('buildRequest (pure, no network)', () => {
     const { url, headers, body } = buildRequest({ provider: 'groq', apiKey: 'gsk-test', model: '' }, 'hi', 50);
     expect(url).toBe('https://api.groq.com/openai/v1/chat/completions');
     expect(headers.Authorization).toBe('Bearer gsk-test');
-    expect(body.model).toBe('llama-3.3-70b-versatile');
+    expect(body.model).toBe('openai/gpt-oss-120b');
   });
 
   test('builds an OpenAI request with a custom model override', () => {
