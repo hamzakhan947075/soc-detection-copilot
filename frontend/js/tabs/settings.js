@@ -131,6 +131,11 @@ function wireEvents(container, providers) {
       setStatus('Enter an API key before saving.', true);
       return;
     }
+    const meta = providers.find((p) => p.id === provider);
+    if (meta && !meta.defaultModel && !model) {
+      setStatus(`${meta.label} has no default model - enter one in the Model field before saving.`, true);
+      return;
+    }
     setStatus('Saving AI configuration…');
     try {
       const ai = await api.setAiConfig({ provider, apiKey, model: model || undefined, baseUrl: baseUrl || undefined });

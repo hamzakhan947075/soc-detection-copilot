@@ -147,6 +147,16 @@ describe('aiConfigStore', () => {
     );
   });
 
+  test('requires an explicit model for a provider with no default model (openrouter, custom) - catches it at save time, not on first use', () => {
+    expect(() => aiConfigStore.setRuntimeConfig({ provider: 'openrouter', apiKey: 'sk-or-abc' })).toThrow(aiConfigStore.AiConfigValidationError);
+    expect(() => aiConfigStore.setRuntimeConfig({ provider: 'openrouter', apiKey: 'sk-or-abc', model: '  ' })).toThrow(aiConfigStore.AiConfigValidationError);
+    expect(() => aiConfigStore.setRuntimeConfig({ provider: 'openrouter', apiKey: 'sk-or-abc', model: 'meta-llama/llama-3.3-70b-instruct:free' })).not.toThrow();
+  });
+
+  test('does not require an explicit model for a provider with a built-in default (e.g. groq)', () => {
+    expect(() => aiConfigStore.setRuntimeConfig({ provider: 'groq', apiKey: 'gsk-abc' })).not.toThrow();
+  });
+
   test('rejects a custom base URL pointing at a cloud instance-metadata service (SSRF)', () => {
     expect(() =>
       aiConfigStore.setRuntimeConfig({ provider: 'custom', apiKey: 'x', model: 'llama3', baseUrl: 'http://169.254.169.254/latest/meta-data/' })

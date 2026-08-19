@@ -124,6 +124,12 @@ function setRuntimeConfig({ provider, apiKey, model, baseUrl }) {
   if (meta.requiresBaseUrl && !resolvedBaseUrl) {
     throw new AiConfigValidationError(`${meta.label} requires a base URL`);
   }
+  // Providers with no baked-in default model (openrouter, custom) need one
+  // supplied explicitly - otherwise this looks "enabled" here but every
+  // actual call fails later with a much less actionable error.
+  if (!meta.defaultModel && !(typeof model === 'string' && model.trim())) {
+    throw new AiConfigValidationError(`${meta.label} requires a model name - pick one and enter it in the Model field.`);
+  }
 
   runtimeOverride = {
     provider,
