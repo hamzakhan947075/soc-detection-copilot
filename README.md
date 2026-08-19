@@ -6,7 +6,7 @@
 Take raw logs exported from Elastic — or uploaded/pasted from anywhere — and run them through a real, end-to-end detection engineering workflow: field discovery, ECS mapping, behavioral detection, MITRE ATT&CK mapping, rule generation, testing, false-positive analysis, and tuning.
 
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen)
-![Tests](https://img.shields.io/badge/tests-108%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-120%20passing-brightgreen)
 ![No build step](https://img.shields.io/badge/frontend-vanilla%20JS%2C%20no%20build%20step-blue)
 ![Deterministic core](https://img.shields.io/badge/core%20logic-deterministic-informational)
 ![Status](https://img.shields.io/badge/status-active-success)
@@ -22,6 +22,7 @@ This is **not** a generic "paste logs, get an AI answer" tool. Every calculation
 - [The pipeline](#the-pipeline)
 - [Features](#features)
 - [Quick start](#quick-start)
+- [Deploy online](#deploy-online)
 - [Running tests](#running-tests)
 - [Project layout](#project-layout)
 - [Environment variables](#environment-variables)
@@ -92,11 +93,25 @@ Open `http://localhost:4000`, go to **Log Ingestion**, and click one of the **sa
 
 To use your own data: upload a `.json` / `.jsonl` / `.ndjson` / `.txt` / `.log` / `.csv` file, or paste raw events directly. The app does **not** assume your logs are already ECS-compliant, and understands common Elastic export shapes (`message`, `event.original`, `log.original`).
 
+## Deploy online
+
+The whole app is a single stateless-ish Node/Express process (in-memory sessions, 2-hour TTL, no database), so it deploys to any host that can run `node backend/src/server.js` and keep it alive. [Render](https://render.com) is the easiest free option:
+
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/hamzakhan947075/soc-detection-copilot)
+
+1. Click the button above (or **New +** → **Blueprint** on Render and point it at this repo) — it reads [`render.yaml`](render.yaml), which builds/starts from `backend/`.
+2. Wait for the first deploy to finish, then open the `.onrender.com` URL Render gives you.
+3. Nothing else is required — every environment variable is optional. If you want AI-assist or a live Elasticsearch connection in the deployed app, either add them as environment variables in the Render dashboard (see the table below), or just open the deployed app's **Settings** tab and paste an API key in directly (session-memory only, never written to disk).
+
+Free-tier note: Render's free web services spin down after 15 minutes of inactivity and cold-start on the next request (session data does not survive a spin-down/restart, same as restarting it locally).
+
+Any other Node host works the same way (Railway, Fly.io, a plain VPS with `pm2`/`systemd`, etc.) — just set the working directory to `backend/`, run `npm install && npm start`, and make sure the platform's assigned `PORT` reaches the process (the app already reads `process.env.PORT`).
+
 ## Running tests
 
 ```bash
 cd backend
-npm test              # 108 tests across parsing, field discovery, ECS
+npm test              # 120 tests across parsing, field discovery, ECS
                        # mapping, detection engine, MITRE mapping, rule
                        # generation/validation, rule testing, false-positive
                        # analysis, tuning, AI provider config, and API/upload security
@@ -128,7 +143,7 @@ backend/
     pipeline/          session store + orchestration + pipeline stage metadata
     routes/            Express API
   sample-data/         8 bundled sample datasets
-  tests/               108 tests (see above)
+  tests/               120 tests (see above)
 frontend/
   js/
     api.js, state.js, controller.js, pipelineBar.js, utils.js
