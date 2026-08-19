@@ -6,7 +6,7 @@
 Take raw logs exported from Elastic — or uploaded/pasted from anywhere — and run them through a real, end-to-end detection engineering workflow: field discovery, ECS mapping, behavioral detection, MITRE ATT&CK mapping, rule generation, testing, false-positive analysis, and tuning.
 
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen)
-![Tests](https://img.shields.io/badge/tests-293%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-308%20passing-brightgreen)
 ![No build step](https://img.shields.io/badge/frontend-vanilla%20JS%2C%20no%20build%20step-blue)
 ![Deterministic core](https://img.shields.io/badge/core%20logic-deterministic-informational)
 ![Status](https://img.shields.io/badge/status-active-success)
@@ -84,6 +84,7 @@ flowchart LR
 - 🌓 **Dark SOC/SIEM-themed UI** — 13 tabs, no build step, no framework
 - ✨ **Multi-provider AI assist, hardened** — Claude, Groq, OpenAI, or any other OpenAI-compatible API; configure via environment variables or paste a key straight into the **Settings** tab (session-memory only, never written to disk, always masked when shown back). Every call has a request timeout and a bounded retry policy with backoff for transient failures (network error, 429 rate limit, 5xx) - auth errors are never retried, and every failure carries a stable error code (`timeout`/`network`/`rate_limited`/`auth`/`server_error`), not just a message. Powers optional "Explain with AI" buttons on detections, ECS mappings, and false-positive analysis — every one of them has a deterministic fallback when no key is set or a call fails, and AI output is narrative-only: it can never alter a detection's severity/confidence/MITRE mapping, an ECS mapping, a rule's conditions/query, a test result, or a persisted lifecycle status
 - 🔒 **Security-first**: upload allowlisting/size limits, bounded JSON parsing, catastrophic-backtracking-safe regexes, escaped/validated (never executed) query generation, rate limiting, env-var-only secrets, prototype-pollution guards on every analyst-editable field path, SSRF blocking on the custom AI endpoint, and a hard timeout on every outbound network call (AI provider, Elasticsearch)
+- 🔑 **Opt-in authentication** — set one env var (`APP_PASSWORD`) to require a login for every API route and, functionally, the whole UI. A signed, `HttpOnly` session cookie, constant-time password comparison, never echoed back. Unset by default for zero-config local use, with a clear startup warning either way
 
 ## Quick start
 
@@ -108,6 +109,8 @@ The app is a single Node/Express process. Session/pipeline data (parsed events, 
 2. Wait for the first deploy to finish, then open the `.onrender.com` URL Render gives you.
 3. Nothing else is required — every environment variable is optional. If you want AI-assist or a live Elasticsearch connection in the deployed app, either add them as environment variables in the Render dashboard (see the table below), or just open the deployed app's **Settings** tab and paste an API key in directly (session-memory only, never written to disk).
 
+**Set `APP_PASSWORD` before sharing the URL with anyone, or leaving it publicly reachable.** Without it, anyone who finds the URL has full read/write access - there's no login at all, and the app logs a startup warning saying so. With `APP_PASSWORD` set, every API route (and functionally the whole UI) requires that password to do anything; see [Environment variables](#environment-variables).
+
 Free-tier note: Render's free web services spin down after 15 minutes of inactivity and cold-start on the next request (session data does not survive a spin-down/restart, same as restarting it locally).
 
 Any other Node host works the same way (Railway, Fly.io, a plain VPS with `pm2`/`systemd`, etc.) — just set the working directory to `backend/`, run `npm install && npm start`, and make sure the platform's assigned `PORT` reaches the process (the app already reads `process.env.PORT`).
@@ -116,7 +119,7 @@ Any other Node host works the same way (Railway, Fly.io, a plain VPS with `pm2`/
 
 ```bash
 cd backend
-npm test              # 293 tests across parsing, field discovery, ECS
+npm test              # 308 tests across parsing, field discovery, ECS
                        # mapping, detection engine, MITRE mapping, rule
                        # generation/validation, rule testing, false-positive
                        # analysis, tuning, AI provider config, and API/upload security
@@ -153,7 +156,7 @@ backend/
     pipeline/          session store + orchestration + pipeline stage metadata
     routes/            Express API
   sample-data/         8 bundled sample datasets
-  tests/               293 tests (see above)
+  tests/               308 tests (see above)
 frontend/
   js/
     api.js, state.js, controller.js, pipelineBar.js, utils.js
@@ -175,6 +178,8 @@ All optional — copy `backend/.env.example` to `backend/.env`. Nothing here is 
 | Variable | Purpose |
 |---|---|
 | `PORT` | HTTP port (default `4000`) |
+| `APP_PASSWORD` | If set, every API route requires this password (session cookie, 12h TTL) - **unset means no login at all**, logged as a startup warning. See [Security](#security) |
+| `SESSION_SECRET` | Signs the session cookie; auto-generated per boot if unset (sessions then don't survive a restart) |
 | `MAX_UPLOAD_BYTES`, `MAX_PASTE_BYTES`, `MAX_EVENTS_PER_DATASET` | Upload/ingestion limits |
 | `RATE_LIMIT_WINDOW_MS`, `RATE_LIMIT_MAX` | API rate limiting |
 | `INTERNAL_CIDR_RANGES` | Comma-separated CIDR list overriding the default RFC1918/loopback/link-local ranges the CIDR evaluator treats as "internal" |
@@ -189,6 +194,7 @@ The frontend talks to a REST API under `/api` — see `backend/src/routes/api.js
 
 | Method & Path | Purpose |
 |---|---|
+| `GET /api/auth/status`, `POST /api/auth/login` (`{password}`), `POST /api/auth/logout` | Always reachable regardless of auth state - everything else under `/api` requires a valid session once `APP_PASSWORD` is set |
 | `POST /api/sessions` | Ingest a file upload (`file` field) or pasted text (`{text, filename}`) |
 | `POST /api/samples/:name/load` | Load a bundled sample dataset |
 | `GET /api/sessions/:id/fields` | Field discovery results |
@@ -219,6 +225,7 @@ The frontend talks to a REST API under `/api` — see `backend/src/routes/api.js
 - **SSRF hardening**: a custom AI provider's base URL is rejected if it resolves to a cloud instance-metadata address (`169.254.169.254`, `fd00:ec2::254`, `metadata.google.internal`) - loopback and private-network addresses stay allowed, since pointing at a self-hosted local LLM is an intended use of the custom provider.
 - Every outbound network call this app makes (AI provider, Elasticsearch) has a request timeout - none can hang the server indefinitely on an unreachable host. AI calls additionally retry transient failures (network error, 429, 5xx) with backoff; auth errors are never retried.
 - No `child_process`/shell execution anywhere in the codebase - there is no command-injection surface to defend.
+- **Authentication**: opt-in via `APP_PASSWORD` (a single shared password, not multi-user accounts - deliberately, since this is a single-analyst workspace, not a SaaS product). A signed, `HttpOnly`/`SameSite=Strict` session cookie is issued on login; the password comparison uses `crypto.timingSafeEqual`, never a plain `===`, and is never echoed back in any response. Unset means no login at all, logged as a startup warning - see [Known limitations](#known-limitations-stated-honestly-not-hidden).
 
 ## Known limitations (stated honestly, not hidden)
 
@@ -227,8 +234,8 @@ The frontend talks to a REST API under `/api` — see `backend/src/routes/api.js
 - PDF report export is intentionally not implemented (JSON/Markdown/CSV are); a correct PDF renderer is a substantial dependency on its own.
 - Log source identification and ECS mapping are confidence-scored heuristics, not guaranteed-correct — the UI always shows confidence and reasoning, and never presents an uncertain mapping or MITRE technique as definitive.
 - **Detection lifecycle persistence is real but narrow, not general persistence.** A detection's approval/production status and version history now survive a restart via SQLite (`persistence/`) - but everything else (parsed events, mappings, normalized events, in-session detections/rules/test results) is still in-memory only, and on Render's free tier the SQLite file itself doesn't survive a deploy/spin-down unless it's on a mounted persistent disk.
-- **The positive/negative/edge test-case framework validates a rule's own logic in isolation, not real-world coverage.** Auto-generated cases prove the rule matches what it says it matches and doesn't match an obviously different value - they cannot tell you whether the rule covers every real attacker variation, only whether its stated conditions behave as claimed. Frontend test coverage is still zero (all 293 tests are backend-only).
-- There is still no authentication — see [ARCHITECTURE_AUDIT.md](ARCHITECTURE_AUDIT.md) for the full maturity assessment and roadmap.
+- **The positive/negative/edge test-case framework validates a rule's own logic in isolation, not real-world coverage.** Auto-generated cases prove the rule matches what it says it matches and doesn't match an obviously different value - they cannot tell you whether the rule covers every real attacker variation, only whether its stated conditions behave as claimed. Frontend test coverage is still zero (all 308 tests are backend-only).
+- **Authentication is real but intentionally minimal**: one shared password (`APP_PASSWORD`), not per-analyst accounts - there's no username, no audit trail of *who* approved a detection beyond the free-text `author` field callers can set on their own, and no way to revoke a single session early (no server-side session table to delete from) short of changing `SESSION_SECRET`, which invalidates every session at once including your own, or waiting out the 12-hour TTL. This is a deliberate scope boundary for a single-analyst tool, not an oversight - see [ARCHITECTURE_AUDIT.md](ARCHITECTURE_AUDIT.md) for the full maturity assessment and roadmap.
 
 ---
 

@@ -25,6 +25,11 @@ async function handle(res) {
 }
 
 export const api = {
+  getAuthStatus: () => fetch(`${BASE}/auth/status`).then(handle),
+  login: (password) =>
+    fetch(`${BASE}/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password }) }).then(handle),
+  logout: () => fetch(`${BASE}/auth/logout`, { method: 'POST' }).then(handle),
+
   getPipeline: () => fetch(`${BASE}/pipeline`).then(handle),
   getMitre: () => fetch(`${BASE}/mitre/techniques`).then(handle),
   getAiStatus: () => fetch(`${BASE}/ai/status`).then(handle),

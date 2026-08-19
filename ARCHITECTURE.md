@@ -170,7 +170,19 @@ inherently-ephemeral session data around it. See
 `persistence/db.js`'s module comment for why this is deliberately scoped
 to lifecycle state only, not general app persistence.
 
-## Frontend
+## Authentication
+
+Opt-in via `APP_PASSWORD` (`auth/authMiddleware.js`, `auth/session.js`,
+`routes/authRoutes.js`) - a single shared password, not per-analyst
+accounts, matching the "single-analyst workspace" scope above. When unset,
+`requireAuth` is a no-op and every route is open, exactly as before this
+existed; a request rejected by it looks identical to any other request
+that never reaches `apiRouter`. When set, logging in issues a signed,
+`HttpOnly`/`SameSite=Strict` cookie (`auth/session.js` - HMAC over a JSON
+payload with `config.auth.sessionSecret`, no database, nothing to revoke
+server-side beyond the 12-hour expiry baked into the token itself).
+`/api/auth/*` is mounted before `requireAuth` in `app.js` so login/logout/
+status are always reachable; everything else under `/api` is not.
 
 Plain ES modules, no build step, no framework - `frontend/js/app.js` wires
 up 13 tab modules (`frontend/js/tabs/*.js`) against a small `state.js`

@@ -1,5 +1,7 @@
 'use strict';
 
+const crypto = require('crypto');
+
 /**
  * Central place to read configuration from environment variables.
  * No secrets are ever hardcoded here - everything comes from process.env,
@@ -44,6 +46,18 @@ const config = {
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean),
+
+  // If APP_PASSWORD is unset, the app runs with no authentication at all -
+  // fine for local single-analyst use, dangerous on a public deployment.
+  // See auth/authMiddleware.js: a startup warning is logged either way, and
+  // /api/auth/status tells the frontend whether a login is required.
+  // SESSION_SECRET signs the session cookie; if unset, one is generated at
+  // boot (sessions won't survive a restart, but nothing is silently
+  // insecure - a session token from a previous boot simply stops validating).
+  auth: {
+    password: process.env.APP_PASSWORD || '',
+    sessionSecret: process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex'),
+  },
 
   ai: {
     ...resolveAiEnvConfig(),
