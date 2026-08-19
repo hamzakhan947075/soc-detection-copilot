@@ -1,6 +1,7 @@
 # Production Maturity Assessment
 
-Last verified: 2026-08-19, against commit `9c9d209` (Milestone 13).
+Last verified: 2026-08-19, against the E2E-test-suite addition after
+Milestone 14 (commit `038b63b` plus the `e2e/` suite added on top of it).
 
 This document is deterministic, not a subjective score: every line below
 is either a command you can re-run yourself or a specific file/line
@@ -16,11 +17,12 @@ for the full, honest list this document summarizes.
 ```bash
 cd backend && npm test && npm run lint && npm audit --audit-level=high
 cd ../frontend && npm test && npm audit --audit-level=high
+cd ../e2e && npm install && npx playwright install --with-deps chromium && npm test
 ```
 
-All four commands pass as of the date above. CI (`.github/workflows/ci.yml`)
-runs the same four commands, plus a boot smoke test, on every push/PR to
-`main` on Node 18.x and 20.x.
+All commands pass as of the date above. CI (`.github/workflows/ci.yml`)
+runs the same checks, plus a boot smoke test, on every push/PR to `main`
+on Node 18.x and 20.x.
 
 ## Testing
 
@@ -28,11 +30,11 @@ runs the same four commands, plus a boot smoke test, on every push/PR to
 |---|---|
 | Backend unit/integration tests | 313 passing, 0 failing (`cd backend && npm test`) |
 | Frontend unit tests | 38 passing, 0 failing (`cd frontend && npm test`) |
+| End-to-end tests (real Chromium) | 6 passing, 0 failing (`cd e2e && npm test`) - full pipeline golden path, opt-in-auth login/logout, and 3 frontend error paths, each driven against a real running backend |
 | Backend lint | 0 errors, 0 warnings (`cd backend && npm run lint`) |
-| Backend dependency audit | 0 vulnerabilities at any severity |
-| Frontend dependency audit | 0 vulnerabilities at any severity |
-| CI | 4 jobs (lint+test, frontend-test, security-audit, boot-smoke-test), each on Node 18.x and 20.x where applicable |
-| Browser/E2E test coverage | **None.** The 13 tab modules' DOM rendering is verified by hand against the running server, not by an automated browser test. This is the single largest gap in this section. |
+| Backend/frontend/e2e dependency audits | 0 vulnerabilities at any severity, all three `package.json`s |
+| CI | 5 jobs (lint+test, frontend-test, e2e-test, security-audit, boot-smoke-test), each on Node 18.x and 20.x where applicable |
+| Browser/E2E test coverage | **Real but not exhaustive.** The golden path (ingest → ECS map → detect → generate/test a rule → export a report) and the auth login/logout flow are covered end-to-end in a real browser. Most individual tab interactions and edge cases beyond that are still only verified by hand, not by an automated test. |
 | Test-case framework scope | Auto-generated positive/negative/edge cases prove a rule matches what it *claims* to match - they cannot prove real-world attacker-variation coverage. This is a property of static rule testing in general, not an implementation shortfall. |
 
 ## Security
@@ -68,6 +70,7 @@ Real, tested, and live-verified - but deliberately minimal:
 ## Frontend
 
 - 38 unit tests cover the pure/testable layer (`escapeHtml` and badge helpers, `state.js`'s `resolveStage()`, `api.js`'s error-handling contract, `pipelineBar.js`'s stage classification).
+- 6 real-browser E2E tests (`e2e/`, Playwright + Chromium) cover the golden path and the auth login/logout flow against a real running backend - not a mock, not jsdom.
 - All 13 tab modules now show an in-body error box on a failed API call (audited and closed in Milestone 13 - 7 of 13 were missing it before).
 - No frontend build step, no bundler, no framework - by design, not as a gap to fill later.
 
@@ -83,11 +86,11 @@ Real, tested, and live-verified - but deliberately minimal:
 In priority order, the gaps that would actually matter:
 
 1. Per-analyst accounts and an audit trail tied to a real identity, not opt-in single-password auth.
-2. An automated browser/E2E test suite for the 13 tab modules' actual rendering and interaction, not just the pure-logic unit tests that exist today.
+2. Broader browser/E2E coverage of the 13 tab modules' individual interactions and edge cases - today's `e2e/` suite proves the golden path and the auth flow work in a real browser, but doesn't attempt exhaustive per-tab coverage.
 3. Durable session/pipeline state (a real datastore), not 2-hour in-memory TTL, if more than one analyst needs to share in-progress work.
 4. A qualified security review of the generated detection rules' real-world coverage - the built-in test-case framework can only prove internal consistency, not attacker-variation coverage.
 
 None of these are secretly broken today; they are scope boundaries this
 project was never built past. Closing #1 was this project's Milestone 11;
-closing #2 partially happened in Milestone 13 (unit tests only, no E2E
-yet).
+#2 went from zero frontend tests to 38 unit tests plus a 6-test real-browser
+E2E suite covering the golden path and auth flow.

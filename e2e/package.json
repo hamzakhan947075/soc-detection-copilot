@@ -1,0 +1,12 @@
+{
+  "name": "soc-detection-copilot-e2e",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Real-browser end-to-end tests for SOC Detection Copilot, driving the actual served frontend against a real running backend (Playwright + Chromium) - complements the frontend's jsdom unit tests, which cover pure logic only and never render a tab in an actual browser.",
+  "scripts": {
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.62.1"
+  }
+}

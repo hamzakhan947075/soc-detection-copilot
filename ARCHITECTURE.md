@@ -214,10 +214,23 @@ pure/testable layer: `escapeHtml`/`severityBadge`/`statusBadge`/
 `confidenceBar`, `state.js`'s `resolveStage()` pipeline-stage ladder and
 its DOM-writing `setStatus`/`setSessionLabel`, `api.js`'s error-taxonomy
 contract (including the `getReport` fix above), and `pipelineBar.js`'s
-done/current/upcoming classification. The 13 tab modules' own DOM
-rendering has no automated coverage yet - no browser/E2E test runner is
-wired up - so that layer is still verified by hand against the running
-server, not by CI.
+done/current/upcoming classification.
+
+The 13 tab modules' actual DOM rendering is covered separately, by
+`e2e/` - Playwright driving a real headless Chromium against two real
+`node src/server.js` instances (`e2e/playwright.config.js` starts and
+stops them, each with `DETECTION_DB_PATH=:memory:` so a run never
+touches `backend/data/`). One spec walks the entire pipeline end to end
+- load the `ssh_auth` sample, approve ECS mappings, run detection,
+generate a rule, test it, review false positives and tuning, and export
+a report via a real browser download event; a second spec drives the
+opt-in-auth login/logout flow (`APP_PASSWORD` set on the second server
+instance) - wrong password rejected, right password admitted, session
+surviving a reload, logout returning to the login screen; a third
+exercises a couple of client-side error paths (a disallowed file
+extension, an empty paste). This is real coverage of the golden path and
+the auth flow, not an attempt at exhaustive per-tab UI coverage - see
+`MATURITY.md`.
 
 ## Observability
 
