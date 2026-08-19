@@ -105,6 +105,46 @@ describe('testRule', () => {
     const result = testRule(rule, events);
     expect(result.eventsMatched).toBe(0);
   });
+
+  test('a cidr "in" condition matches an IP inside the range and not one outside it', () => {
+    const events = [
+      { '@timestamp': new Date().toISOString(), source: { ip: '10.0.0.5' } },
+      { '@timestamp': new Date().toISOString(), source: { ip: '203.0.113.9' } },
+    ];
+    const rule = { conditions: [{ field: 'source.ip', cidr: { ranges: ['10.0.0.0/8'], mode: 'in' } }], threshold: null, groupingFields: [] };
+    const result = testRule(rule, events);
+    expect(result.eventsMatched).toBe(1);
+    expect(result.matchedEvents[0].event.source.ip).toBe('10.0.0.5');
+  });
+
+  test('a cidr "not_in" condition inverts the match', () => {
+    const events = [
+      { '@timestamp': new Date().toISOString(), destination: { ip: '10.0.0.5' } },
+      { '@timestamp': new Date().toISOString(), destination: { ip: '203.0.113.9' } },
+    ];
+    const rule = { conditions: [{ field: 'destination.ip', cidr: { ranges: ['10.0.0.0/8'], mode: 'not_in' } }], threshold: null, groupingFields: [] };
+    const result = testRule(rule, events);
+    expect(result.eventsMatched).toBe(1);
+    expect(result.matchedEvents[0].event.destination.ip).toBe('203.0.113.9');
+  });
+
+  test('combining an "in" source cidr with a "not_in" destination cidr reproduces internal-to-external matching', () => {
+    const events = [
+      { '@timestamp': new Date().toISOString(), source: { ip: '10.0.0.5' }, destination: { ip: '203.0.113.9' } }, // internal -> external: matches
+      { '@timestamp': new Date().toISOString(), source: { ip: '10.0.0.5' }, destination: { ip: '10.0.0.9' } }, // internal -> internal: no match
+      { '@timestamp': new Date().toISOString(), source: { ip: '203.0.113.1' }, destination: { ip: '203.0.113.9' } }, // external -> external: no match
+    ];
+    const rule = {
+      conditions: [
+        { field: 'source.ip', cidr: { ranges: ['10.0.0.0/8'], mode: 'in' } },
+        { field: 'destination.ip', cidr: { ranges: ['10.0.0.0/8'], mode: 'not_in' } },
+      ],
+      threshold: null,
+      groupingFields: [],
+    };
+    const result = testRule(rule, events);
+    expect(result.eventsMatched).toBe(1);
+  });
 });
 
 describe('analyzeFalsePositives', () => {

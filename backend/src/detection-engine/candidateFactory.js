@@ -21,6 +21,7 @@ function makeCandidate({
   matchedEventIndexes,
   evidence,
   ruleConditions,
+  evaluatorResult,
 }) {
   counter += 1;
   return {
@@ -41,6 +42,12 @@ function makeCandidate({
     // guess. Falls back to the mitreHint dictionary in queryConditions.js
     // when a behavior does not set this explicitly.
     ruleConditions: ruleConditions || null,
+    // Optional: the structured {matched, score, reasons, evidence} output of
+    // a deterministic evaluator (detection-engine/evaluators/*.js), for
+    // detections whose signal is a computed score rather than a simple
+    // field/value match (CIDR direction, DNS-label entropy, C2 timing
+    // regularity). null for detections that don't use one.
+    evaluatorResult: evaluatorResult || null,
   };
 }
 

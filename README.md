@@ -6,7 +6,7 @@
 Take raw logs exported from Elastic — or uploaded/pasted from anywhere — and run them through a real, end-to-end detection engineering workflow: field discovery, ECS mapping, behavioral detection, MITRE ATT&CK mapping, rule generation, testing, false-positive analysis, and tuning.
 
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen)
-![Tests](https://img.shields.io/badge/tests-149%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-186%20passing-brightgreen)
 ![No build step](https://img.shields.io/badge/frontend-vanilla%20JS%2C%20no%20build%20step-blue)
 ![Deterministic core](https://img.shields.io/badge/core%20logic-deterministic-informational)
 ![Status](https://img.shields.io/badge/status-active-success)
@@ -72,6 +72,7 @@ flowchart LR
 - 🔍 **Log source identification** — Linux SSH, Windows Security, Sysmon, Apache/Nginx/IIS, firewalls (Fortinet/Palo Alto/Cisco/generic), DNS, DHCP, VPN, proxy, EDR, cloud (CloudTrail/Azure/M365), database, and custom application logs
 - 🧭 **Analyst-in-the-loop ECS mapping** — every suggestion shows its confidence and reasoning, and can be overridden before normalization
 - 🕵️ **6 behavior families, 25+ individual detections** — brute force, password spraying, privileged auth, reverse shells, suspicious sudo, encoded/suspicious PowerShell, LOLBins, credential dumping, persistence (services/scheduled tasks/registry run keys/cron), port scanning, DNS tunneling, C2 beaconing, SQLi/XSS/path traversal/web shells, and firewall anomalies
+- 🧮 **Real deterministic evaluators** for the three hardest signals — CIDR internal/external direction (IPv4+IPv6, configurable ranges), DNS-tunneling entropy/length/character-distribution, and C2 beaconing timing regularity — each returns structured, explainable evidence (`detection-engine/evaluators/`), no LLM involved
 - 🎯 **MITRE ATT&CK mapping** that never overstates confidence
 - 📝 **5 query languages** generated per detection: KQL, ES\|QL, EQL, Lucene, Sigma
 - ✅ **Real rule testing** — each detection carries the exact structured conditions that reproduced its own match, so "test against sample logs" reflects reality instead of a generic placeholder
@@ -111,7 +112,7 @@ Any other Node host works the same way (Railway, Fly.io, a plain VPS with `pm2`/
 
 ```bash
 cd backend
-npm test              # 149 tests across parsing, field discovery, ECS
+npm test              # 186 tests across parsing, field discovery, ECS
                        # mapping, detection engine, MITRE mapping, rule
                        # generation/validation, rule testing, false-positive
                        # analysis, tuning, AI provider config, and API/upload security
@@ -129,7 +130,8 @@ backend/
     ecs-mapping/       ECS schema subset, alias dictionary, confidence-scored mapper
     log-source-id/     declarative log-source signatures + scorer
     normalization/     raw event -> normalized ECS event
-    detection-engine/  behaviors/{auth,linux,windows,network,web,firewall}.js
+    detection-engine/  behaviors/{auth,linux,windows,network,web,firewall}.js,
+                       evaluators/{cidr,dnsTunneling,c2Beaconing}Evaluator.js
     detections/        canonical Detection record (additive) + evaluator result contract
     mitre/             static hint -> {tactic, technique} lookup
     rule-generation/   KQL/ES|QL/EQL/Lucene/Sigma builders + rule assembly
@@ -144,7 +146,7 @@ backend/
     pipeline/          session store + orchestration + pipeline stage metadata
     routes/            Express API
   sample-data/         8 bundled sample datasets
-  tests/               149 tests (see above)
+  tests/               186 tests (see above)
 frontend/
   js/
     api.js, state.js, controller.js, pipelineBar.js, utils.js
@@ -168,6 +170,7 @@ All optional — copy `backend/.env.example` to `backend/.env`. Nothing here is 
 | `PORT` | HTTP port (default `4000`) |
 | `MAX_UPLOAD_BYTES`, `MAX_PASTE_BYTES`, `MAX_EVENTS_PER_DATASET` | Upload/ingestion limits |
 | `RATE_LIMIT_WINDOW_MS`, `RATE_LIMIT_MAX` | API rate limiting |
+| `INTERNAL_CIDR_RANGES` | Comma-separated CIDR list overriding the default RFC1918/loopback/link-local ranges the CIDR evaluator treats as "internal" |
 | `ELASTICSEARCH_URL`, `ELASTICSEARCH_USERNAME`, `ELASTICSEARCH_PASSWORD`, `ELASTICSEARCH_API_KEY`, `ELASTICSEARCH_INDEX` | Optional direct Elasticsearch fetch (Settings tab shows connection status) |
 | `AI_PROVIDER` (`anthropic`\|`groq`\|`openai`\|`custom`), plus per-provider `ANTHROPIC_API_KEY`/`ANTHROPIC_MODEL`, `GROQ_API_KEY`/`GROQ_MODEL`, `OPENAI_API_KEY`/`OPENAI_MODEL`, or `AI_API_KEY`+`AI_BASE_URL`+`AI_MODEL` for a custom OpenAI-compatible endpoint | Optional AI-assist narrative text. Instead of env vars, a key can also be pasted into the **Settings** tab at runtime — that takes priority for the life of the running process and is never written to disk (see [Environment variables](#environment-variables) note below) |
 
@@ -201,9 +204,11 @@ The frontend talks to a REST API under `/api` — see `backend/src/routes/api.js
 
 ## Known limitations (stated honestly, not hidden)
 
-- A handful of detections (CIDR-based internal/external traffic, DNS-tunneling entropy/length, C2 beaconing timing regularity) can't be fully expressed by the simplified `{field, value}` rule-condition model; their generated queries are a documented starting point, not a finished production rule — see the inline comments in `detection-engine/behaviors/`.
+- **CIDR-based internal/external traffic** is now a real, tested evaluator (`detection-engine/evaluators/cidrEvaluator.js`, IPv4 + IPv6, configurable range list) with a genuine `cidr` condition rendered into all 5 query languages — this one is no longer a gap.
+- **DNS-tunneling** (length/entropy/character-distribution/subdomain-depth, `detection-engine/evaluators/dnsTunnelingEvaluator.js`) and **C2 beaconing timing regularity** (`detection-engine/evaluators/c2BeaconingEvaluator.js`) are now real, tested, deterministic evaluators with structured evidence — but their *generated query* still can only check that the relevant field exists, because entropy/character-distribution and multi-event timing regularity genuinely cannot be expressed as a static filter in KQL/EQL/ES|QL/Lucene/Sigma (that needs a scripted field or an aggregation pipeline, not a `WHERE` clause). This is a real limitation of static query languages, not an unfinished implementation — see the inline comments in `detection-engine/behaviors/networkBehaviors.js`.
 - PDF report export is intentionally not implemented (JSON/Markdown/CSV are); a correct PDF renderer is a substantial dependency on its own.
 - Log source identification and ECS mapping are confidence-scored heuristics, not guaranteed-correct — the UI always shows confidence and reasoning, and never presents an uncertain mapping or MITRE technique as definitive.
+- There is no persistence (in-memory sessions only) and no authentication yet — see [ARCHITECTURE_AUDIT.md](ARCHITECTURE_AUDIT.md) for the full maturity assessment and roadmap.
 
 ---
 

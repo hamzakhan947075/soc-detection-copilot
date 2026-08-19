@@ -1,7 +1,11 @@
 'use strict';
 
 const { makeCandidate } = require('../candidateFactory');
-const { groupBy, isPrivateIp } = require('../utils');
+const { groupBy } = require('../utils');
+const { evaluateCidrDirection, DEFAULT_INTERNAL_CIDRS } = require('../evaluators/cidrEvaluator');
+const config = require('../../config/env');
+
+const INTERNAL_CIDRS = config.internalCidrRanges && config.internalCidrRanges.length ? config.internalCidrRanges : DEFAULT_INTERNAL_CIDRS;
 
 function detectFirewallBehaviors(events) {
   const firewallEvents = events.filter((e) => e.flat['destination.ip'] && (e.flat['event.action'] || e.flat['event.outcome']));
@@ -51,7 +55,8 @@ function detectInternalToExternalAnomalies(events) {
   const matches = events.filter((e) => {
     const src = e.flat['source.ip'];
     const dst = e.flat['destination.ip'];
-    return isPrivateIp(src) && dst && !isPrivateIp(dst);
+    if (!src || !dst) return false;
+    return evaluateCidrDirection({ sourceIp: src, destinationIp: dst, internalCidrs: INTERNAL_CIDRS, direction: 'internal_source_external_dest' }).matched;
   });
 
   const byPair = groupBy(matches, (e) => `${e.flat['source.ip']}->${e.flat['destination.ip']}`);
@@ -60,6 +65,8 @@ function detectInternalToExternalAnomalies(events) {
   if (highVolumePairs.length === 0) return candidates;
 
   for (const [pair, group] of highVolumePairs) {
+    const [srcIp, dstIp] = pair.split('->');
+    const evaluatorResult = evaluateCidrDirection({ sourceIp: srcIp, destinationIp: dstIp, internalCidrs: INTERNAL_CIDRS, direction: 'internal_source_external_dest' });
     candidates.push(
       makeCandidate({
         name: 'Internal-to-External Traffic Anomaly',
@@ -70,14 +77,17 @@ function detectInternalToExternalAnomalies(events) {
         requiredFields: ['source.ip', 'destination.ip', 'network.bytes', '@timestamp'],
         mitreHint: 'data_exfiltration',
         matchedEventIndexes: group.map((e) => e.index),
-        evidence: [`pair=${pair}`, `connections=${group.length}`],
-        // Note: "internal source / external destination" is a CIDR-range
-        // comparison, which the simplified {field, value} condition model
-        // used for rule generation/testing cannot express directly. The
-        // rendered query only checks that both fields are present - an
-        // analyst must add the actual internal-CIDR exclusion before
-        // deploying this one.
-        ruleConditions: [{ field: 'source.ip', exists: true }, { field: 'destination.ip', exists: true }],
+        evidence: [`pair=${pair}`, `connections=${group.length}`, ...evaluatorResult.reasons],
+        evaluatorResult,
+        // Real CIDR evaluation (detection-engine/evaluators/cidrEvaluator.js)
+        // against a configurable internal-range list (INTERNAL_CIDR_RANGES
+        // env var, default RFC1918 + loopback + link-local). Genuinely
+        // expressible in all 5 query languages via the `cidr` condition -
+        // see rule-generation/queryLanguages.js.
+        ruleConditions: [
+          { field: 'source.ip', cidr: { ranges: INTERNAL_CIDRS, mode: 'in' } },
+          { field: 'destination.ip', cidr: { ranges: INTERNAL_CIDRS, mode: 'not_in' } },
+        ],
       })
     );
   }

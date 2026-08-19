@@ -109,4 +109,97 @@ describe('detectFirewallBehaviors via runDetectionEngine', () => {
     const result = runDetectionEngine(events);
     expect(result.detections.find((d) => d.name === 'Repeated Denied Firewall Connections')).toBeDefined();
   });
+
+  test('flags high-volume internal-to-external traffic using the real CIDR evaluator', () => {
+    const events = Array.from({ length: 25 }, (_, i) => ({
+      '@timestamp': new Date(Date.UTC(2026, 7, 19, 10, 0, i)).toISOString(),
+      source: { ip: '10.0.0.5' },
+      destination: { ip: '203.0.113.200' },
+      event: { action: 'allowed' },
+    }));
+    const result = runDetectionEngine(events);
+    const anomaly = result.detections.find((d) => d.name === 'Internal-to-External Traffic Anomaly');
+    expect(anomaly).toBeDefined();
+    expect(anomaly.evaluatorResult.matched).toBe(true);
+    expect(anomaly.evaluatorResult.evidence.sourceInternal).toBe(true);
+    expect(anomaly.evaluatorResult.evidence.destinationInternal).toBe(false);
+    expect(anomaly.ruleConditions).toEqual([
+      { field: 'source.ip', cidr: { ranges: expect.any(Array), mode: 'in' } },
+      { field: 'destination.ip', cidr: { ranges: expect.any(Array), mode: 'not_in' } },
+    ]);
+  });
+
+  test('does not flag high-volume internal-to-internal traffic', () => {
+    const events = Array.from({ length: 25 }, (_, i) => ({
+      '@timestamp': new Date(Date.UTC(2026, 7, 19, 10, 0, i)).toISOString(),
+      source: { ip: '10.0.0.5' },
+      destination: { ip: '10.0.0.99' },
+      event: { action: 'allowed' },
+    }));
+    const result = runDetectionEngine(events);
+    expect(result.detections.find((d) => d.name === 'Internal-to-External Traffic Anomaly')).toBeUndefined();
+  });
+});
+
+describe('detectNetworkBehaviors: DNS tunneling and C2 beaconing via runDetectionEngine', () => {
+  test('flags a group of long, high-entropy DNS queries under one domain', () => {
+    const encodedLabels = [
+      'a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0',
+      'z9y8x7w6v5u4t3s2r1q0p9o8n7m6l5k4j3i2h1g0',
+      'm3n4o5p6q7r8s9t0a1b2c3d4e5f6g7h8i9j0k1l2',
+    ];
+    const events = encodedLabels.map((label, i) => ({
+      '@timestamp': new Date(Date.UTC(2026, 7, 19, 10, 0, i)).toISOString(),
+      source: { ip: '10.0.0.5' },
+      dns: { question: { name: `${label}.exfil.example.net` } },
+    }));
+    const result = runDetectionEngine(events);
+    const tunneling = result.detections.find((d) => d.name === 'Possible DNS Tunneling');
+    expect(tunneling).toBeDefined();
+    expect(tunneling.evaluatorResult.matched).toBe(true);
+    expect(tunneling.evaluatorResult.evidence.sampleCount).toBe(3);
+    expect(tunneling.ruleConditions).toEqual([{ field: 'dns.question.name', exists: true }]);
+  });
+
+  test('does not flag ordinary DNS queries', () => {
+    const events = ['www.example.com', 'api.example.com', 'login.example.com'].map((name, i) => ({
+      '@timestamp': new Date(Date.UTC(2026, 7, 19, 10, 0, i)).toISOString(),
+      source: { ip: '10.0.0.5' },
+      dns: { question: { name } },
+    }));
+    const result = runDetectionEngine(events);
+    expect(result.detections.find((d) => d.name === 'Possible DNS Tunneling')).toBeUndefined();
+  });
+
+  test('flags highly regular connection timing as possible C2 beaconing', () => {
+    const base = Date.UTC(2026, 7, 19, 10, 0, 0);
+    const events = Array.from({ length: 10 }, (_, i) => ({
+      '@timestamp': new Date(base + i * 60_000).toISOString(),
+      source: { ip: '10.0.0.5' },
+      destination: { ip: '203.0.113.55', port: 443 },
+    }));
+    const result = runDetectionEngine(events);
+    const beaconing = result.detections.find((d) => d.name === 'Possible C2 Beaconing');
+    expect(beaconing).toBeDefined();
+    expect(beaconing.evaluatorResult.matched).toBe(true);
+    expect(beaconing.evaluatorResult.evidence.intervalMeanMs).toBe(60_000);
+  });
+
+  test('does not flag irregular connection timing', () => {
+    const base = Date.UTC(2026, 7, 19, 10, 0, 0);
+    const jitters = [5, 400, 12, 900, 20, 600, 1100, 8];
+    let t = base;
+    const events = [{ t }];
+    for (const j of jitters) {
+      t += j * 1000;
+      events.push({ t });
+    }
+    const withDest = events.map(({ t: ts }) => ({
+      '@timestamp': new Date(ts).toISOString(),
+      source: { ip: '10.0.0.5' },
+      destination: { ip: '203.0.113.55' },
+    }));
+    const result = runDetectionEngine(withDest);
+    expect(result.detections.find((d) => d.name === 'Possible C2 Beaconing')).toBeUndefined();
+  });
 });

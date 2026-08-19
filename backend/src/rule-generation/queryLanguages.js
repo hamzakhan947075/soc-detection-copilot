@@ -13,6 +13,14 @@
  *                                (used for cardinality-only signals like
  *                                port scanning, where no specific value
  *                                matters)
+ *   { field, cidr: { ranges: [...], mode } } - true when the field's IP value
+ *                                falls inside ('in') or outside ('not_in')
+ *                                every listed CIDR range. Genuinely
+ *                                expressible in all 5 languages (KQL/Lucene
+ *                                IP-field term queries, EQL/ES|QL's
+ *                                cidrMatch()/CIDR_MATCH(), Sigma's `|cidr`
+ *                                field modifier), unlike the other
+ *                                evaluator-backed signals below.
  * Any of the above may also carry `exact: true`, which only affects how
  * testing/ruleTester.js matches it against events (a substring match would
  * be a false positive for this field - e.g. an identity field like
@@ -27,6 +35,10 @@
 function valuesOf(condition) {
   if (Array.isArray(condition.values) && condition.values.length > 0) return condition.values;
   return [condition.value];
+}
+
+function cidrRangesOf(condition) {
+  return condition.cidr && Array.isArray(condition.cidr.ranges) ? condition.cidr.ranges.filter(Boolean) : [];
 }
 
 function escapeForQuoted(value) {
@@ -47,6 +59,12 @@ function escapeIndexPattern(index) {
 function buildKql(conditions) {
   const clauses = conditions.map((c) => {
     const field = escapeFieldName(c.field);
+    if (c.cidr) {
+      const ranges = cidrRangesOf(c).map((r) => `"${escapeForQuoted(r)}"`);
+      if (ranges.length === 0) return `${field}:*`;
+      const inClause = ranges.length > 1 ? `${field}:(${ranges.join(' or ')})` : `${field}:${ranges[0]}`;
+      return c.cidr.mode === 'not_in' ? `not ${inClause}` : inClause;
+    }
     if (c.exists) return `${field}:*`;
     const values = valuesOf(c).map((v) => `"${escapeForQuoted(v)}"`);
     return values.length > 1 ? `${field}:(${values.join(' or ')})` : `${field}:${values[0]}`;
@@ -57,6 +75,12 @@ function buildKql(conditions) {
 function buildLucene(conditions) {
   const clauses = conditions.map((c) => {
     const field = escapeFieldName(c.field);
+    if (c.cidr) {
+      const ranges = cidrRangesOf(c).map((r) => `"${escapeForQuoted(r)}"`);
+      if (ranges.length === 0) return `${field}:*`;
+      const inClause = ranges.length > 1 ? `${field}:(${ranges.join(' OR ')})` : `${field}:${ranges[0]}`;
+      return c.cidr.mode === 'not_in' ? `NOT ${inClause}` : inClause;
+    }
     if (c.exists) return `${field}:*`;
     const values = valuesOf(c).map((v) => `"${escapeForQuoted(v)}"`);
     return values.length > 1 ? `${field}:(${values.join(' OR ')})` : `${field}:${values[0]}`;
@@ -67,6 +91,12 @@ function buildLucene(conditions) {
 function buildEql(conditions, category = 'process') {
   const clauses = conditions.map((c) => {
     const field = escapeFieldName(c.field);
+    if (c.cidr) {
+      const ranges = cidrRangesOf(c).map((r) => `"${escapeForQuoted(r)}"`);
+      if (ranges.length === 0) return `${field} != null`;
+      const call = `cidrMatch(${field}, ${ranges.join(', ')})`;
+      return c.cidr.mode === 'not_in' ? `not ${call}` : call;
+    }
     if (c.exists) return `${field} != null`;
     const values = valuesOf(c);
     const eqs = values.map((v) => `${field} == "${escapeForQuoted(v)}"`);
@@ -81,6 +111,12 @@ function buildEql(conditions, category = 'process') {
 function buildEsql(conditions, index, threshold) {
   const clauses = conditions.map((c) => {
     const field = escapeFieldName(c.field);
+    if (c.cidr) {
+      const ranges = cidrRangesOf(c).map((r) => `"${escapeForQuoted(r)}"`);
+      if (ranges.length === 0) return `${field} IS NOT NULL`;
+      const call = `CIDR_MATCH(${field}, ${ranges.join(', ')})`;
+      return c.cidr.mode === 'not_in' ? `NOT ${call}` : call;
+    }
     if (c.exists) return `${field} IS NOT NULL`;
     const values = valuesOf(c);
     const eqs = values.map((v) => `${field} == "${escapeForQuoted(v)}"`);
@@ -102,24 +138,47 @@ function buildEsql(conditions, index, threshold) {
   return query;
 }
 
+function sigmaConditionLine(c) {
+  const field = sigmaFieldName(c.field);
+  if (c.cidr) {
+    const ranges = cidrRangesOf(c);
+    if (ranges.length === 0) return `        ${field}: '*'`;
+    if (ranges.length === 1) return `        ${field}|cidr: '${escapeForQuoted(ranges[0])}'`;
+    const list = ranges.map((r) => `\n            - '${escapeForQuoted(r)}'`).join('');
+    return `        ${field}|cidr:${list}`;
+  }
+  if (c.exists) return `        ${field}: '*'`;
+  const values = valuesOf(c);
+  if (values.length > 1) {
+    const list = values.map((v) => `\n            - "${escapeForQuoted(v)}"`).join('');
+    return `        ${field}:${list}`;
+  }
+  return `        ${field}: "${escapeForQuoted(values[0])}"`;
+}
+
 function buildSigma({ ruleName, description, conditions, mitre, severity, logsourceCategory, threshold }) {
-  const selectionLines = conditions.map((c) => {
-    const field = sigmaFieldName(c.field);
-    if (c.exists) return `        ${field}: '*'`;
-    const values = valuesOf(c);
-    if (values.length > 1) {
-      const list = values.map((v) => `\n            - "${escapeForQuoted(v)}"`).join('');
-      return `        ${field}:${list}`;
-    }
-    return `        ${field}: "${escapeForQuoted(values[0])}"`;
-  });
+  // A plain Sigma selection block is an implicit AND-of-equals - there's no
+  // per-field "not" modifier, so a `cidr: {mode: 'not_in'}` condition (e.g.
+  // "destination is not internal") needs its own `filter` block, combined
+  // via `selection and not filter`, per Sigma's standard exclusion pattern.
+  const exclusionConditions = conditions.filter((c) => c.cidr && c.cidr.mode === 'not_in');
+  const positiveConditions = conditions.filter((c) => !(c.cidr && c.cidr.mode === 'not_in'));
+
+  const selectionLines = positiveConditions.map(sigmaConditionLine);
   const selection = selectionLines.length > 0 ? selectionLines.join('\n') : "        '*': '*'";
+
+  const detectionLines = ['    selection:', selection];
+  let conditionExpr = 'selection';
+  if (exclusionConditions.length > 0) {
+    detectionLines.push('    filter:', exclusionConditions.map(sigmaConditionLine).join('\n'));
+    conditionExpr = 'selection and not filter';
+  }
 
   const groupFields = (threshold?.groupBy || []).map(sigmaFieldName).join(', ') || 'source.ip';
   const aggregateField = threshold?.distinctField ? sigmaFieldName(threshold.distinctField) : '';
   const conditionLine = threshold
-    ? `selection | count(${aggregateField}) by ${groupFields} >= ${threshold.count || 10}`
-    : 'selection';
+    ? `${conditionExpr} | count(${aggregateField}) by ${groupFields} >= ${threshold.count || 10}`
+    : conditionExpr;
 
   return [
     'title: ' + yamlString(ruleName),
@@ -128,8 +187,7 @@ function buildSigma({ ruleName, description, conditions, mitre, severity, logsou
     'logsource:',
     `    category: ${logsourceCategory}`,
     'detection:',
-    '    selection:',
-    selection,
+    ...detectionLines,
     `    condition: ${conditionLine}`,
     `level: ${sigmaLevel(severity)}`,
     'tags:',
@@ -150,4 +208,4 @@ function sigmaLevel(severity) {
   return map[severity] || 'medium';
 }
 
-module.exports = { buildKql, buildLucene, buildEql, buildEsql, buildSigma, escapeForQuoted, escapeFieldName, escapeIndexPattern, valuesOf };
+module.exports = { buildKql, buildLucene, buildEql, buildEsql, buildSigma, escapeForQuoted, escapeFieldName, escapeIndexPattern, valuesOf, cidrRangesOf };

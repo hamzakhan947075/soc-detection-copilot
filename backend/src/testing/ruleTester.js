@@ -2,6 +2,7 @@
 
 const { flattenEvent } = require('../field-discovery/flatten');
 const { groupBy } = require('../detection-engine/utils');
+const { isIpInCidrList } = require('../detection-engine/evaluators/cidrEvaluator');
 
 /**
  * Executes a generated rule's structured `conditions` (and optional
@@ -55,6 +56,11 @@ function matchesConditions(flat, conditions) {
     const value = flat[c.field];
     if (value === undefined || value === null || value === '') return false;
     if (c.exists) return true;
+    if (c.cidr) {
+      const ranges = Array.isArray(c.cidr.ranges) ? c.cidr.ranges : [];
+      const inRange = isIpInCidrList(String(value), ranges);
+      return c.cidr.mode === 'not_in' ? !inRange : inRange;
+    }
     const haystack = String(value).toLowerCase();
     const candidates = Array.isArray(c.values) && c.values.length > 0 ? c.values : [c.value];
     // Most conditions intentionally match as a substring/term search - they

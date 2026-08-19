@@ -1,11 +1,11 @@
 'use strict';
 
 const { makeCandidate } = require('../candidateFactory');
-const { groupBy, maxEventsInWindow, shannonEntropy } = require('../utils');
+const { groupBy, maxEventsInWindow } = require('../utils');
+const { evaluateDnsTunneling } = require('../evaluators/dnsTunnelingEvaluator');
+const { evaluateBeaconing } = require('../evaluators/c2BeaconingEvaluator');
 
 const ONE_MIN_MS = 60 * 1000;
-const HIGH_ENTROPY_THRESHOLD = 3.8;
-const LONG_LABEL_THRESHOLD = 35;
 
 function detectNetworkBehaviors(events) {
   const candidates = [];
@@ -50,37 +50,39 @@ function detectPortScanning(events) {
 
 function detectDnsTunneling(events) {
   const dnsEvents = events.filter((e) => e.flat['dns.question.name']);
-  const candidates = [];
-  const suspicious = dnsEvents.filter((e) => {
-    const name = String(e.flat['dns.question.name'] || '');
-    const label = name.split('.')[0] || '';
-    return label.length >= LONG_LABEL_THRESHOLD && shannonEntropy(label) >= HIGH_ENTROPY_THRESHOLD;
-  });
+  if (dnsEvents.length === 0) return [];
 
-  if (suspicious.length === 0) return candidates;
-
-  const byDomain = groupBy(suspicious, (e) => {
+  const byDomain = groupBy(dnsEvents, (e) => {
     const parts = String(e.flat['dns.question.name']).split('.');
     return parts.slice(-2).join('.');
   });
 
+  const candidates = [];
   for (const [domain, group] of byDomain.entries()) {
-    if (group.length < 3) continue;
+    const evaluatorResult = evaluateDnsTunneling(group.map((e) => String(e.flat['dns.question.name'])));
+    if (!evaluatorResult.matched) continue;
+
     candidates.push(
       makeCandidate({
         name: 'Possible DNS Tunneling',
         category: 'network',
         severity: 'medium',
-        confidence: 0.6,
-        description: `${group.length} DNS queries with long, high-entropy subdomains observed under "${domain}" - one heuristic signal for DNS tunneling/exfiltration. Confirm with payload/volume analysis before treating as confirmed.`,
+        confidence: Math.min(0.85, 0.5 + evaluatorResult.score * 0.4),
+        description: `${evaluatorResult.evidence.suspiciousCount}/${evaluatorResult.evidence.sampleCount} DNS queries under "${domain}" show length/entropy/character-distribution signals consistent with tunneling (mean entropy ${evaluatorResult.evidence.meanEntropy} bits/char). Confirm with payload/volume analysis before treating as confirmed.`,
         requiredFields: ['dns.question.name', 'source.ip', '@timestamp'],
         mitreHint: 'dns_tunneling',
         matchedEventIndexes: group.map((e) => e.index),
-        evidence: group.slice(0, 5).map((e) => String(e.flat['dns.question.name'])),
-        // The actual signal is subdomain length + entropy, which the simple
-        // condition model can't express; the rendered query only checks
-        // that a DNS question exists and should be refined by the analyst
-        // (e.g. with a length() function in Elastic) before deployment.
+        evidence: evaluatorResult.reasons,
+        evaluatorResult,
+        // Deterministic evaluator: detection-engine/evaluators/
+        // dnsTunnelingEvaluator.js (length + Shannon entropy + character
+        // distribution + subdomain depth, requiring a *consistent* pattern
+        // across the group - see evaluatorResult for the full breakdown).
+        // None of the 5 target query languages can express entropy or
+        // character-distribution as a static filter (that needs a scripted
+        // field, not a query), so the rendered query can only check that a
+        // DNS question exists - this is a genuine, stated limitation of
+        // static query languages, not an unfinished implementation.
         ruleConditions: [{ field: 'dns.question.name', exists: true }],
       })
     );
@@ -120,37 +122,38 @@ function detectBeaconing(events) {
   const candidates = [];
 
   for (const [pair, group] of byPair.entries()) {
-    if (group.length < 6) continue;
-    const timestamps = group.map((e) => e.timestampMs).sort((a, b) => a - b);
-    const intervals = [];
-    for (let i = 1; i < timestamps.length; i++) intervals.push(timestamps[i] - timestamps[i - 1]);
-    const mean = intervals.reduce((a, b) => a + b, 0) / intervals.length;
-    if (mean <= 0) continue;
-    const variance = intervals.reduce((sum, v) => sum + (v - mean) ** 2, 0) / intervals.length;
-    const stdDev = Math.sqrt(variance);
-    const coefficientOfVariation = stdDev / mean;
+    const [srcIp, dstIp] = pair.split('->');
+    const evaluatorResult = evaluateBeaconing(
+      group.map((e) => e.timestampMs),
+      { destination: dstIp, destinationPort: group[0].flat['destination.port'] },
+      { maxMeanIntervalMs: 30 * ONE_MIN_MS }
+    );
+    if (!evaluatorResult.matched) continue;
 
-    // Low variance in inter-connection timing is the classic beaconing signal.
-    if (coefficientOfVariation < 0.15 && mean < 30 * ONE_MIN_MS) {
-      candidates.push(
-        makeCandidate({
-          name: 'Possible C2 Beaconing',
-          category: 'network',
-          severity: 'high',
-          confidence: 0.65,
-          description: `Connections from ${pair} occur at highly regular intervals (avg ${Math.round(mean / 1000)}s, coefficient of variation ${coefficientOfVariation.toFixed(2)}) - a common beaconing pattern for command-and-control check-ins.`,
-          requiredFields: ['source.ip', 'destination.ip', '@timestamp'],
-          mitreHint: 'c2_communication',
-          matchedEventIndexes: group.map((e) => e.index),
-          evidence: [`pair=${pair}`, `connections=${group.length}`, `avg_interval_sec=${Math.round(mean / 1000)}`],
-          // The actual signal is inter-connection timing regularity, which
-          // the simple condition model can't express; the rendered query
-          // only checks that a destination exists and should be refined
-          // (e.g. with a scheduled timing analysis) before deployment.
-          ruleConditions: [{ field: 'destination.ip', exists: true }],
-        })
-      );
-    }
+    candidates.push(
+      makeCandidate({
+        name: 'Possible C2 Beaconing',
+        category: 'network',
+        severity: 'high',
+        confidence: Math.min(0.9, 0.5 + evaluatorResult.score * 0.4),
+        description: `Connections from ${srcIp} to ${dstIp} occur at highly regular intervals (avg ${Math.round(evaluatorResult.evidence.intervalMeanMs / 1000)}s, coefficient of variation ${evaluatorResult.evidence.coefficientOfVariation}) - a common beaconing pattern for command-and-control check-ins.`,
+        requiredFields: ['source.ip', 'destination.ip', '@timestamp'],
+        mitreHint: 'c2_communication',
+        matchedEventIndexes: group.map((e) => e.index),
+        evidence: [`pair=${pair}`, `connections=${group.length}`, ...evaluatorResult.reasons],
+        evaluatorResult,
+        // Deterministic evaluator: detection-engine/evaluators/
+        // c2BeaconingEvaluator.js (mean/stddev/coefficient-of-variation of
+        // inter-connection intervals - see evaluatorResult for the full
+        // breakdown). Timing regularity across multiple events is
+        // fundamentally not expressible as a single-event filter condition
+        // in any of the 5 target query languages (it requires cross-event
+        // aggregation, not a static WHERE clause) - the rendered query can
+        // only check that a destination exists. This is a genuine,
+        // stated limitation, not an unfinished implementation.
+        ruleConditions: [{ field: 'destination.ip', exists: true }],
+      })
+    );
   }
   return candidates;
 }

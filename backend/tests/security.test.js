@@ -166,6 +166,37 @@ describe('End-to-end pipeline smoke test via API', () => {
     const res = await request(app).get(`/api/sessions/${sessionId}/detections/does-not-exist/record`);
     expect(res.status).toBe(404);
   });
+
+  test('a rule generated for the CIDR-based internal-to-external detection actually reproduces the match when tested', async () => {
+    // Regression test for the CIDR evaluator work: this detection used to
+    // render a rule that only checked both fields existed (a documented
+    // gap), so testing it never proved anything. It now renders a real
+    // cidr condition, and this proves end-to-end that testing the
+    // generated rule against the same traffic that triggered it actually
+    // matches - and that traffic between two internal hosts does not.
+    const events = [
+      ...Array.from({ length: 25 }, (_, i) => ({
+        '@timestamp': new Date(Date.UTC(2026, 7, 19, 10, 0, i)).toISOString(),
+        source: { ip: '10.0.0.5' },
+        destination: { ip: '203.0.113.200' },
+        event: { action: 'allowed' },
+      })),
+      { '@timestamp': '2026-08-19T10:01:00Z', source: { ip: '10.0.0.5' }, destination: { ip: '10.0.0.99' }, event: { action: 'allowed' } },
+    ];
+    const loadRes = await request(app)
+      .post('/api/sessions')
+      .send({ text: events.map((e) => JSON.stringify(e)).join('\n'), filename: 'internal-external.ndjson' });
+    const { sessionId } = loadRes.body;
+    await request(app).post(`/api/sessions/${sessionId}/normalize`);
+    const detectRes = await request(app).post(`/api/sessions/${sessionId}/detect`);
+    const anomaly = detectRes.body.detections.find((d) => d.name === 'Internal-to-External Traffic Anomaly');
+    expect(anomaly).toBeDefined();
+
+    const ruleRes = await request(app).post(`/api/sessions/${sessionId}/rules`).send({ detectionId: anomaly.id, ruleType: 'kql' });
+    expect(ruleRes.body.query).toMatch(/source\.ip:.*10\.0\.0\.0\/8.*and not destination\.ip/);
+    const testRes = await request(app).post(`/api/sessions/${sessionId}/rules/${ruleRes.body.ruleId}/test`);
+    expect(testRes.body.testResult.eventsMatched).toBe(25);
+  });
 });
 
 describe('AI config API', () => {

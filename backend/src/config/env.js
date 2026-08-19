@@ -35,6 +35,15 @@ const config = {
     index: process.env.ELASTICSEARCH_INDEX || '',
   },
 
+  // Comma-separated CIDR list (e.g. "10.0.0.0/8,192.168.1.0/24") that
+  // overrides the CIDR evaluator's default RFC1918/loopback/link-local
+  // ranges for what counts as "internal" - lets an analyst reflect their own
+  // network's actual internal ranges instead of a generic default.
+  internalCidrRanges: (process.env.INTERNAL_CIDR_RANGES || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean),
+
   ai: resolveAiEnvConfig(),
 };
 
