@@ -6,7 +6,7 @@
 Take raw logs exported from Elastic — or uploaded/pasted from anywhere — and run them through a real, end-to-end detection engineering workflow: field discovery, ECS mapping, behavioral detection, MITRE ATT&CK mapping, rule generation, testing, false-positive analysis, and tuning.
 
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen)
-![Tests](https://img.shields.io/badge/tests-86%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-108%20passing-brightgreen)
 ![No build step](https://img.shields.io/badge/frontend-vanilla%20JS%2C%20no%20build%20step-blue)
 ![Deterministic core](https://img.shields.io/badge/core%20logic-deterministic-informational)
 ![Status](https://img.shields.io/badge/status-active-success)
@@ -76,6 +76,7 @@ flowchart LR
 - ✅ **Real rule testing** — each detection carries the exact structured conditions that reproduced its own match, so "test against sample logs" reflects reality instead of a generic placeholder
 - 📊 **SOC-style dashboard** — logs processed, mapping coverage, detections, rules validated, MITRE technique count, high-risk findings
 - 🌓 **Dark SOC/SIEM-themed UI** — 13 tabs, no build step, no framework
+- ✨ **Multi-provider AI assist** — Claude, Groq, OpenAI, or any other OpenAI-compatible API; configure via environment variables or paste a key straight into the **Settings** tab (session-memory only, never written to disk, always masked when shown back). Powers optional "Explain with AI" buttons on detections and false-positive analysis — every one of them has a deterministic fallback when no key is set
 - 🔒 **Security-first**: upload allowlisting/size limits, bounded JSON parsing, catastrophic-backtracking-safe regexes, escaped/validated (never executed) query generation, rate limiting, and env-var-only secrets
 
 ## Quick start
@@ -95,10 +96,10 @@ To use your own data: upload a `.json` / `.jsonl` / `.ndjson` / `.txt` / `.log` 
 
 ```bash
 cd backend
-npm test              # 86 tests across parsing, field discovery, ECS
+npm test              # 108 tests across parsing, field discovery, ECS
                        # mapping, detection engine, MITRE mapping, rule
                        # generation/validation, rule testing, false-positive
-                       # analysis, tuning, and API/upload security
+                       # analysis, tuning, AI provider config, and API/upload security
 ```
 
 ## Project layout
@@ -122,12 +123,12 @@ backend/
     tuning/             threshold tuning recommendation
     investigation/     per-category investigation checklists
     reporting/          Detection Engineering Report + dashboard aggregation
-    ai/                 optional Anthropic-backed narrative assist
+    ai/                 multi-provider (Claude/Groq/OpenAI/custom) narrative assist
     security/          helmet, rate limiting, safe error handler
     pipeline/          session store + orchestration + pipeline stage metadata
     routes/            Express API
   sample-data/         8 bundled sample datasets
-  tests/               86 tests (see above)
+  tests/               108 tests (see above)
 frontend/
   js/
     api.js, state.js, controller.js, pipelineBar.js, utils.js
@@ -152,7 +153,7 @@ All optional — copy `backend/.env.example` to `backend/.env`. Nothing here is 
 | `MAX_UPLOAD_BYTES`, `MAX_PASTE_BYTES`, `MAX_EVENTS_PER_DATASET` | Upload/ingestion limits |
 | `RATE_LIMIT_WINDOW_MS`, `RATE_LIMIT_MAX` | API rate limiting |
 | `ELASTICSEARCH_URL`, `ELASTICSEARCH_USERNAME`, `ELASTICSEARCH_PASSWORD`, `ELASTICSEARCH_API_KEY`, `ELASTICSEARCH_INDEX` | Optional direct Elasticsearch fetch (Settings tab shows connection status) |
-| `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL` | Optional AI-assist narrative text |
+| `AI_PROVIDER` (`anthropic`\|`groq`\|`openai`\|`custom`), plus per-provider `ANTHROPIC_API_KEY`/`ANTHROPIC_MODEL`, `GROQ_API_KEY`/`GROQ_MODEL`, `OPENAI_API_KEY`/`OPENAI_MODEL`, or `AI_API_KEY`+`AI_BASE_URL`+`AI_MODEL` for a custom OpenAI-compatible endpoint | Optional AI-assist narrative text. Instead of env vars, a key can also be pasted into the **Settings** tab at runtime — that takes priority for the life of the running process and is never written to disk (see [Environment variables](#environment-variables) note below) |
 
 ## API
 
@@ -180,7 +181,7 @@ The frontend talks to a REST API under `/api` — see `backend/src/routes/api.js
 - Regexes are hand-reviewed for catastrophic-backtracking safety.
 - Generated queries are built from an escaped, structured condition list and syntax-validated — never executed against a live system by this tool.
 - Helmet security headers, per-IP rate limiting, generic (non-leaking) error responses.
-- Elasticsearch/AI credentials come only from environment variables, never hardcoded, never logged.
+- Elasticsearch credentials come only from environment variables, never hardcoded, never logged. AI provider keys come from environment variables or the Settings tab (session memory only, never written to disk) - never hardcoded, never logged, always masked when displayed back.
 
 ## Known limitations (stated honestly, not hidden)
 

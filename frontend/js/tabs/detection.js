@@ -57,7 +57,11 @@ function renderResults(container) {
       <p class="muted">Required fields: ${d.requiredFields.map((f) => `<code>${escapeHtml(f)}</code>`).join(', ')}</p>
       ${d.recommendedThreshold ? `<p class="muted">Recommended threshold: &ge; ${d.recommendedThreshold.count} events${d.recommendedThreshold.windowMinutes ? ` within ${d.recommendedThreshold.windowMinutes} minutes` : ''}</p>` : ''}
       <ul class="evidence-list">${d.evidence.slice(0, 5).map((e) => `<li>${escapeHtml(e)}</li>`).join('')}</ul>
-      <button class="generate-rule-btn" data-id="${escapeHtml(d.id)}">Generate Detection Rule &rarr;</button>
+      <div class="select-row">
+        <button class="generate-rule-btn" data-id="${escapeHtml(d.id)}">Generate Detection Rule &rarr;</button>
+        <button class="explain-ai-btn" data-id="${escapeHtml(d.id)}">${state.aiEnabled ? '✨ Explain with AI' : '✨ Explain (deterministic)'}</button>
+      </div>
+      <div class="ai-explanation muted" data-explain-for="${escapeHtml(d.id)}"></div>
     </div>`
     )
     .join('');
@@ -66,6 +70,21 @@ function renderResults(container) {
     btn.addEventListener('click', () => {
       state.selectedDetectionId = btn.dataset.id;
       controller.goTo('rules');
+    });
+  });
+
+  target.querySelectorAll('.explain-ai-btn').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const box = target.querySelector(`.ai-explanation[data-explain-for="${btn.dataset.id}"]`);
+      box.textContent = 'Thinking…';
+      try {
+        const explanation = await api.explainDetection(state.sessionId, btn.dataset.id);
+        const label = explanation.source === 'ai' ? '✨ AI' : 'Deterministic summary';
+        box.innerHTML = `<strong>${escapeHtml(label)}:</strong> ${escapeHtml(explanation.text)}`;
+      } catch (err) {
+        box.textContent = '';
+        setStatus(err.message, true);
+      }
     });
   });
 }

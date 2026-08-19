@@ -1,4 +1,5 @@
-import { state } from '../state.js';
+import { api } from '../api.js';
+import { state, setStatus } from '../state.js';
 import { escapeHtml } from '../utils.js';
 
 export const id = 'falsepositive';
@@ -25,8 +26,12 @@ export async function render(container) {
     </div>
 
     <div class="card section-gap">
-      <h3>Why These May Occur</h3>
+      <div class="detection-head">
+        <h3 style="margin:0">Why These May Occur</h3>
+        <button id="explainFpBtn">${state.aiEnabled ? '✨ Explain with AI' : '✨ Explain (deterministic)'}</button>
+      </div>
       <ul>${rule.falsePositiveScenarios.map((s) => `<li>${escapeHtml(s)}</li>`).join('')}</ul>
+      <div id="fpAiExplanation" class="muted"></div>
     </div>
 
     <div class="card">
@@ -35,4 +40,17 @@ export async function render(container) {
       <ul class="section-gap">${rule.recommendedExclusions.map((s) => `<li>${escapeHtml(s)}</li>`).join('')}</ul>
     </div>
   `;
+
+  container.querySelector('#explainFpBtn').addEventListener('click', async () => {
+    const box = container.querySelector('#fpAiExplanation');
+    box.textContent = 'Thinking…';
+    try {
+      const explanation = await api.explainFalsePositives(state.sessionId, rule.ruleId);
+      const label = explanation.source === 'ai' ? '✨ AI' : 'Deterministic summary';
+      box.innerHTML = `<strong>${escapeHtml(label)}:</strong> ${escapeHtml(explanation.text)}`;
+    } catch (err) {
+      box.textContent = '';
+      setStatus(err.message, true);
+    }
+  });
 }

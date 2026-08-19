@@ -35,12 +35,36 @@ const config = {
     index: process.env.ELASTICSEARCH_INDEX || '',
   },
 
-  ai: {
-    provider: process.env.AI_PROVIDER || 'none', // 'anthropic' | 'none'
-    apiKey: process.env.ANTHROPIC_API_KEY || '',
-    model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-5',
-    enabled: Boolean(process.env.ANTHROPIC_API_KEY),
-  },
+  ai: resolveAiEnvConfig(),
 };
+
+/**
+ * Picks an AI provider/key/model from environment variables. Priority when
+ * AI_PROVIDER is unset: Anthropic, then Groq, then OpenAI, then a custom
+ * OpenAI-compatible endpoint - whichever has a key actually set. This is
+ * only the *default*; the Settings tab can override it at runtime for the
+ * life of the process without touching these env vars (see ai/aiConfigStore.js).
+ */
+function resolveAiEnvConfig() {
+  const explicit = (process.env.AI_PROVIDER || '').toLowerCase();
+
+  const candidates = {
+    anthropic: { apiKey: process.env.ANTHROPIC_API_KEY || '', model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-5', baseUrl: '' },
+    groq: { apiKey: process.env.GROQ_API_KEY || '', model: process.env.GROQ_MODEL || 'llama-3.3-70b-versatile', baseUrl: '' },
+    openai: { apiKey: process.env.OPENAI_API_KEY || '', model: process.env.OPENAI_MODEL || 'gpt-4o-mini', baseUrl: '' },
+    custom: { apiKey: process.env.AI_API_KEY || '', model: process.env.AI_MODEL || '', baseUrl: process.env.AI_BASE_URL || '' },
+  };
+
+  const order = explicit && candidates[explicit] ? [explicit] : ['anthropic', 'groq', 'openai', 'custom'];
+  const chosenProvider = order.find((p) => candidates[p].apiKey) || explicit || 'anthropic';
+  const chosen = candidates[chosenProvider] || candidates.anthropic;
+
+  return {
+    provider: chosenProvider,
+    apiKey: chosen.apiKey,
+    model: chosen.model,
+    baseUrl: chosen.baseUrl,
+  };
+}
 
 module.exports = config;

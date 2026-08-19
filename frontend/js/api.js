@@ -18,6 +18,15 @@ export const api = {
   getPipeline: () => fetch(`${BASE}/pipeline`).then(handle),
   getMitre: () => fetch(`${BASE}/mitre/techniques`).then(handle),
   getAiStatus: () => fetch(`${BASE}/ai/status`).then(handle),
+  getAiProviders: () => fetch(`${BASE}/ai/providers`).then(handle),
+  setAiConfig: (payload) =>
+    fetch(`${BASE}/ai/config`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }).then(handle),
+  clearAiConfig: () => fetch(`${BASE}/ai/config`, { method: 'DELETE' }).then(handle),
+  testAiConfig: () => fetch(`${BASE}/ai/test`, { method: 'POST' }).then(handle),
   getSamples: () => fetch(`${BASE}/samples`).then(handle),
   loadSample: (name) => fetch(`${BASE}/samples/${encodeURIComponent(name)}/load`, { method: 'POST' }).then(handle),
 
@@ -48,6 +57,7 @@ export const api = {
   detect: (id) => fetch(`${BASE}/sessions/${id}/detect`, { method: 'POST' }).then(handle),
   getDetections: (id) => fetch(`${BASE}/sessions/${id}/detections`).then(handle),
   explainDetection: (id, detectionId) => fetch(`${BASE}/sessions/${id}/detections/${detectionId}/explain`).then(handle),
+  explainFalsePositives: (id, ruleId) => fetch(`${BASE}/sessions/${id}/rules/${ruleId}/explain-fp`).then(handle),
 
   createRule: (id, payload) =>
     fetch(`${BASE}/sessions/${id}/rules`, {

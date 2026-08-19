@@ -3,6 +3,7 @@
 const request = require('supertest');
 const { createApp } = require('../src/app');
 const { loadSampleDataset } = require('../src/ingestion/sampleDatasets');
+const aiConfigStore = require('../src/ai/aiConfigStore');
 
 const app = createApp();
 
@@ -110,5 +111,45 @@ describe('End-to-end pipeline smoke test via API', () => {
     const testRes = await request(app).post(`/api/sessions/${sessionId}/rules/${ruleRes.body.ruleId}/test`);
     expect(testRes.body.testResult.eventsMatched).toBeGreaterThan(0);
     expect(testRes.body.fpAnalysis.likelyTruePositiveCount).toBeGreaterThan(0);
+  });
+});
+
+describe('AI config API', () => {
+  afterEach(() => {
+    aiConfigStore.clearRuntimeConfig();
+  });
+
+  test('lists supported providers', async () => {
+    const res = await request(app).get('/api/ai/providers');
+    expect(res.status).toBe(200);
+    const ids = res.body.providers.map((p) => p.id);
+    expect(ids).toEqual(expect.arrayContaining(['anthropic', 'groq', 'openai', 'custom']));
+  });
+
+  test('rejects an unknown provider', async () => {
+    const res = await request(app).post('/api/ai/config').send({ provider: 'not-real', apiKey: 'x' });
+    expect(res.status).toBe(400);
+  });
+
+  test('rejects an empty API key', async () => {
+    const res = await request(app).post('/api/ai/config').send({ provider: 'groq', apiKey: '' });
+    expect(res.status).toBe(400);
+  });
+
+  test('accepts a valid Groq key and reports enabled status without leaking the raw key', async () => {
+    const res = await request(app).post('/api/ai/config').send({ provider: 'groq', apiKey: 'gsk-test-key-value-12345' });
+    expect(res.status).toBe(200);
+    expect(res.body.enabled).toBe(true);
+    expect(JSON.stringify(res.body)).not.toContain('gsk-test-key-value-12345');
+
+    const status = await request(app).get('/api/ai/status');
+    expect(status.body.enabled).toBe(true);
+    expect(JSON.stringify(status.body)).not.toContain('gsk-test-key-value-12345');
+  });
+
+  test('clearing the config disables AI again', async () => {
+    await request(app).post('/api/ai/config').send({ provider: 'groq', apiKey: 'gsk-test-key' });
+    const cleared = await request(app).delete('/api/ai/config');
+    expect(cleared.body.source).not.toBe('session');
   });
 });

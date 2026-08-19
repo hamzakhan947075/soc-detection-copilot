@@ -18,7 +18,10 @@ const { recommendTuning } = require('../tuning/tuning');
 const { buildReport, toMarkdown, toCsv } = require('../reporting/reportGenerator');
 const { buildDashboard } = require('../reporting/dashboard');
 const { MITRE_LOOKUP } = require('../mitre/mitreMap');
-const { explainDetection, isEnabled: aiEnabled } = require('../ai/aiAssist');
+const { explainDetection, explainFalsePositives, isEnabled: aiEnabled } = require('../ai/aiAssist');
+const aiConfigStore = require('../ai/aiConfigStore');
+const { PROVIDERS } = require('../ai/providerDefaults');
+const { callProvider } = require('../ai/providers');
 
 const router = express.Router();
 
@@ -46,8 +49,52 @@ router.get('/mitre/techniques', (_req, res) => {
 });
 
 router.get('/ai/status', (_req, res) => {
-  res.json({ enabled: aiEnabled() });
+  res.json(aiConfigStore.getPublicStatus());
 });
+
+router.get('/ai/providers', (_req, res) => {
+  const providers = Object.entries(PROVIDERS).map(([id, meta]) => ({
+    id,
+    label: meta.label,
+    defaultModel: meta.defaultModel,
+    requiresBaseUrl: meta.requiresBaseUrl,
+  }));
+  res.json({ providers });
+});
+
+router.post('/ai/config', (req, res) => {
+  try {
+    const status = aiConfigStore.setRuntimeConfig(req.body || {});
+    res.json(status);
+  } catch (err) {
+    if (err instanceof aiConfigStore.AiConfigValidationError) {
+      res.status(400).json({ error: err.message });
+      return;
+    }
+    throw err;
+  }
+});
+
+router.delete('/ai/config', (_req, res) => {
+  res.json(aiConfigStore.clearRuntimeConfig());
+});
+
+router.post(
+  '/ai/test',
+  asyncHandler(async (_req, res) => {
+    if (!aiEnabled()) {
+      res.status(400).json({ success: false, error: 'No AI provider is configured yet.' });
+      return;
+    }
+    try {
+      const settings = aiConfigStore.getEffectiveSettings();
+      const text = await callProvider(settings, 'Reply with only the single word: OK', { maxTokens: 10 });
+      res.json({ success: true, reply: text.trim().slice(0, 100) });
+    } catch (err) {
+      res.status(400).json({ success: false, error: err.message });
+    }
+  })
+);
 
 // ---------- Sample datasets ----------
 router.get('/samples', (_req, res) => {
@@ -259,6 +306,24 @@ router.post('/sessions/:sessionId/rules/:ruleId/test', requireSession, (req, res
 
   res.json({ testResult, fpAnalysis });
 });
+
+router.get(
+  '/sessions/:sessionId/rules/:ruleId/explain-fp',
+  requireSession,
+  asyncHandler(async (req, res) => {
+    const rule = req.session.rules.get(req.params.ruleId);
+    if (!rule) {
+      res.status(404).json({ error: 'Rule not found.' });
+      return;
+    }
+    if (!rule.lastFpAnalysis) {
+      res.status(409).json({ error: 'Rule has not been tested yet. Call POST /test first.' });
+      return;
+    }
+    const explanation = await explainFalsePositives(rule, rule.lastFpAnalysis);
+    res.json(explanation);
+  })
+);
 
 router.get('/sessions/:sessionId/rules/:ruleId/tune', requireSession, (req, res) => {
   const session = req.session;
