@@ -361,3 +361,55 @@ describe('Detection lifecycle API', () => {
     expect(res.status).toBe(400);
   });
 });
+
+describe('Rule test-suite API (positive/negative/edge classification)', () => {
+  test('auto-generates a passing test suite from the rule\'s own conditions, using the real matched event as the positive base', async () => {
+    const loadRes = await request(app).post('/api/samples/ssh_auth/load');
+    const { sessionId } = loadRes.body;
+    await request(app).post(`/api/sessions/${sessionId}/normalize`);
+    const detectRes = await request(app).post(`/api/sessions/${sessionId}/detect`);
+    const bruteForce = detectRes.body.detections.find((d) => d.name.includes('Brute Force'));
+    const ruleRes = await request(app).post(`/api/sessions/${sessionId}/rules`).send({ detectionId: bruteForce.id, ruleType: 'kql' });
+    await request(app).post(`/api/sessions/${sessionId}/rules/${ruleRes.body.ruleId}/test`); // populates a real matched event to seed the positive case
+
+    const suiteRes = await request(app).post(`/api/sessions/${sessionId}/rules/${ruleRes.body.ruleId}/testsuite`).send({});
+    expect(suiteRes.status).toBe(200);
+    expect(suiteRes.body.testCases.positive).toHaveLength(1);
+    expect(suiteRes.body.testCases.positive[0].description).toMatch(/real event/);
+    expect(suiteRes.body.counts.fail).toBe(0);
+    expect(suiteRes.body.counts.error).toBe(0);
+    expect(suiteRes.body.metrics.precision).toBe(1);
+    expect(suiteRes.body.metrics.recall).toBe(1);
+
+    // The detection record now reflects the real test-suite result too.
+    const record = await request(app).get(`/api/sessions/${sessionId}/detections/${bruteForce.id}/record`);
+    expect(record.body.testSuiteResult.metrics.precision).toBe(1);
+    expect(record.body.testCases.positive).toHaveLength(1);
+  });
+
+  test('an analyst-supplied case that exposes a real false positive shows up in the confusion matrix', async () => {
+    const loadRes = await request(app).post('/api/samples/ssh_auth/load');
+    const { sessionId } = loadRes.body;
+    await request(app).post(`/api/sessions/${sessionId}/normalize`);
+    const detectRes = await request(app).post(`/api/sessions/${sessionId}/detect`);
+    const bruteForce = detectRes.body.detections.find((d) => d.name.includes('Brute Force'));
+    const ruleRes = await request(app).post(`/api/sessions/${sessionId}/rules`).send({ detectionId: bruteForce.id, ruleType: 'kql' });
+
+    // Deliberately mislabel a case that the rule WILL match, as if it should not - proving a genuine FP surfaces in the metrics rather than being silently absorbed.
+    const suiteRes = await request(app)
+      .post(`/api/sessions/${sessionId}/rules/${ruleRes.body.ruleId}/testsuite`)
+      .send({
+        includeGenerated: false,
+        testCases: [{ id: 'bad-negative', type: 'negative', expectedMatch: false, event: { event: { category: 'authentication', outcome: 'failure' } } }],
+      });
+    expect(suiteRes.body.confusionMatrix.falsePositives).toBe(1);
+    expect(suiteRes.body.counts.fail).toBe(1);
+  });
+
+  test('404s for an unknown rule id', async () => {
+    const loadRes = await request(app).post('/api/samples/ssh_auth/load');
+    const { sessionId } = loadRes.body;
+    const res = await request(app).post(`/api/sessions/${sessionId}/rules/does-not-exist/testsuite`).send({});
+    expect(res.status).toBe(404);
+  });
+});

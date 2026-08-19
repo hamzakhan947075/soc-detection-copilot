@@ -2,7 +2,7 @@
 
 const { flattenEvent } = require('../field-discovery/flatten');
 const { groupBy } = require('../detection-engine/utils');
-const { isIpInCidrList } = require('../detection-engine/evaluators/cidrEvaluator');
+const { isIpInCidrList, isValidIp } = require('../detection-engine/evaluators/cidrEvaluator');
 
 /**
  * Executes a generated rule's structured `conditions` (and optional
@@ -57,6 +57,13 @@ function matchesConditions(flat, conditions) {
     if (value === undefined || value === null || value === '') return false;
     if (c.exists) return true;
     if (c.cidr) {
+      // A malformed/unparseable value is neither confirmed inside nor
+      // outside any range - it must fail the condition either way, not be
+      // treated as "confirmed external" just because it didn't match any
+      // range. (Regression: previously a garbage/missing IP on a "not_in"
+      // condition evaluated to true, since !isIpInCidrList(...) is true for
+      // any unparseable input.)
+      if (!isValidIp(String(value))) return false;
       const ranges = Array.isArray(c.cidr.ranges) ? c.cidr.ranges : [];
       const inRange = isIpInCidrList(String(value), ranges);
       return c.cidr.mode === 'not_in' ? !inRange : inRange;
@@ -80,4 +87,4 @@ function round2(n) {
   return Math.round(n * 100) / 100;
 }
 
-module.exports = { testRule };
+module.exports = { testRule, matchesConditions };

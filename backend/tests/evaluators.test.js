@@ -1,6 +1,6 @@
 'use strict';
 
-const { isIpInCidrList, isInternalIp, evaluateCidrDirection, DEFAULT_INTERNAL_CIDRS } = require('../src/detection-engine/evaluators/cidrEvaluator');
+const { isIpInCidrList, isInternalIp, isValidIp, evaluateCidrDirection, DEFAULT_INTERNAL_CIDRS } = require('../src/detection-engine/evaluators/cidrEvaluator');
 const { scoreDnsQuery, evaluateDnsTunneling } = require('../src/detection-engine/evaluators/dnsTunnelingEvaluator');
 const { evaluateBeaconing } = require('../src/detection-engine/evaluators/c2BeaconingEvaluator');
 
@@ -56,6 +56,15 @@ describe('cidrEvaluator', () => {
   test('evaluateCidrDirection does not match two internal endpoints', () => {
     const result = evaluateCidrDirection({ sourceIp: '10.0.0.5', destinationIp: '10.0.0.6', direction: 'internal_source_external_dest' });
     expect(result.matched).toBe(false);
+  });
+
+  test('isValidIp distinguishes well-formed addresses from garbage', () => {
+    expect(isValidIp('10.0.0.1')).toBe(true);
+    expect(isValidIp('::1')).toBe(true);
+    expect(isValidIp('not-an-ip')).toBe(false);
+    expect(isValidIp('')).toBe(false);
+    expect(isValidIp(null)).toBe(false);
+    expect(isValidIp('999.999.999.999')).toBe(false);
   });
 
   test('evaluateCidrDirection supports the reverse direction', () => {

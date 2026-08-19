@@ -6,7 +6,7 @@
 Take raw logs exported from Elastic — or uploaded/pasted from anywhere — and run them through a real, end-to-end detection engineering workflow: field discovery, ECS mapping, behavioral detection, MITRE ATT&CK mapping, rule generation, testing, false-positive analysis, and tuning.
 
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen)
-![Tests](https://img.shields.io/badge/tests-211%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-236%20passing-brightgreen)
 ![No build step](https://img.shields.io/badge/frontend-vanilla%20JS%2C%20no%20build%20step-blue)
 ![Deterministic core](https://img.shields.io/badge/core%20logic-deterministic-informational)
 ![Status](https://img.shields.io/badge/status-active-success)
@@ -77,6 +77,7 @@ flowchart LR
 - 🎯 **MITRE ATT&CK mapping** that never overstates confidence
 - 📝 **5 query languages** generated per detection: KQL, ES\|QL, EQL, Lucene, Sigma
 - ✅ **Real rule testing** — each detection carries the exact structured conditions that reproduced its own match, so "test against sample logs" reflects reality instead of a generic placeholder
+- 🧪 **Positive/negative/edge test-case framework** — every rule gets an auto-generated set of test cases (seeded from a real matched event when one exists) plus PASS/FAIL/ERROR/SKIPPED per case and a real confusion matrix (precision/recall/F1/detection-rate/FP-rate, `null` rather than faked when a denominator is zero); analysts can add their own cases on top
 - 📊 **SOC-style dashboard** — logs processed, mapping coverage, detections, rules validated, MITRE technique count, high-risk findings
 - 🌓 **Dark SOC/SIEM-themed UI** — 13 tabs, no build step, no framework
 - ✨ **Multi-provider AI assist** — Claude, Groq, OpenAI, or any other OpenAI-compatible API; configure via environment variables or paste a key straight into the **Settings** tab (session-memory only, never written to disk, always masked when shown back). Powers optional "Explain with AI" buttons on detections and false-positive analysis — every one of them has a deterministic fallback when no key is set
@@ -113,7 +114,7 @@ Any other Node host works the same way (Railway, Fly.io, a plain VPS with `pm2`/
 
 ```bash
 cd backend
-npm test              # 211 tests across parsing, field discovery, ECS
+npm test              # 236 tests across parsing, field discovery, ECS
                        # mapping, detection engine, MITRE mapping, rule
                        # generation/validation, rule testing, false-positive
                        # analysis, tuning, AI provider config, and API/upload security
@@ -138,7 +139,9 @@ backend/
     mitre/             static hint -> {tactic, technique} lookup
     rule-generation/   KQL/ES|QL/EQL/Lucene/Sigma builders + rule assembly
     rule-validation/   non-executing syntax validation
-    testing/           executes a rule's structured conditions against events
+    testing/           executes a rule's structured conditions against events,
+                       plus a labeled positive/negative/edge test-case
+                       runner + generator (precision/recall/F1)
     false-positive/    dynamic FP analysis + static FP guidance
     tuning/             threshold tuning recommendation
     investigation/     per-category investigation checklists
@@ -148,7 +151,7 @@ backend/
     pipeline/          session store + orchestration + pipeline stage metadata
     routes/            Express API
   sample-data/         8 bundled sample datasets
-  tests/               211 tests (see above)
+  tests/               236 tests (see above)
 frontend/
   js/
     api.js, state.js, controller.js, pipelineBar.js, utils.js
@@ -191,6 +194,7 @@ The frontend talks to a REST API under `/api` — see `backend/src/routes/api.js
 | `POST /api/sessions/:id/detect` | Run detection engineering analysis |
 | `POST /api/sessions/:id/rules` | Generate a rule (`{detectionId, ruleType, indexPattern, severityOverride}`) |
 | `POST /api/sessions/:id/rules/:ruleId/test` | Test a rule against the loaded dataset |
+| `POST /api/sessions/:id/rules/:ruleId/testsuite` | Run/extend a labeled positive/negative/edge-case suite (`{testCases?, includeGenerated?}`) → PASS/FAIL/ERROR/SKIPPED per case + confusion matrix + precision/recall/F1/detection-rate/FP-rate |
 | `GET /api/sessions/:id/rules/:ruleId/tune` | Get a tuning recommendation |
 | `GET /api/sessions/:id/rules/:ruleId/report?format=json\|markdown\|csv` | Export the Detection Engineering Report |
 | `GET /api/sessions/:id/dashboard` | Dashboard metrics |
@@ -215,7 +219,9 @@ The frontend talks to a REST API under `/api` — see `backend/src/routes/api.js
 - **DNS-tunneling** (length/entropy/character-distribution/subdomain-depth, `detection-engine/evaluators/dnsTunnelingEvaluator.js`) and **C2 beaconing timing regularity** (`detection-engine/evaluators/c2BeaconingEvaluator.js`) are now real, tested, deterministic evaluators with structured evidence — but their *generated query* still can only check that the relevant field exists, because entropy/character-distribution and multi-event timing regularity genuinely cannot be expressed as a static filter in KQL/EQL/ES|QL/Lucene/Sigma (that needs a scripted field or an aggregation pipeline, not a `WHERE` clause). This is a real limitation of static query languages, not an unfinished implementation — see the inline comments in `detection-engine/behaviors/networkBehaviors.js`.
 - PDF report export is intentionally not implemented (JSON/Markdown/CSV are); a correct PDF renderer is a substantial dependency on its own.
 - Log source identification and ECS mapping are confidence-scored heuristics, not guaranteed-correct — the UI always shows confidence and reasoning, and never presents an uncertain mapping or MITRE technique as definitive.
-- **Detection lifecycle persistence is real but narrow, not general persistence.** A detection's approval/production status and version history now survive a restart via SQLite (`persistence/`) - but everything else (parsed events, mappings, normalized events, in-session detections/rules/test results) is still in-memory only, and on Render's free tier the SQLite file itself doesn't survive a deploy/spin-down unless it's on a mounted persistent disk. There is still no authentication — see [ARCHITECTURE_AUDIT.md](ARCHITECTURE_AUDIT.md) for the full maturity assessment and roadmap.
+- **Detection lifecycle persistence is real but narrow, not general persistence.** A detection's approval/production status and version history now survive a restart via SQLite (`persistence/`) - but everything else (parsed events, mappings, normalized events, in-session detections/rules/test results) is still in-memory only, and on Render's free tier the SQLite file itself doesn't survive a deploy/spin-down unless it's on a mounted persistent disk.
+- **The positive/negative/edge test-case framework validates a rule's own logic in isolation, not real-world coverage.** Auto-generated cases prove the rule matches what it says it matches and doesn't match an obviously different value - they cannot tell you whether the rule covers every real attacker variation, only whether its stated conditions behave as claimed. Frontend test coverage is still zero (all 236 tests are backend-only).
+- There is still no authentication — see [ARCHITECTURE_AUDIT.md](ARCHITECTURE_AUDIT.md) for the full maturity assessment and roadmap.
 
 ---
 

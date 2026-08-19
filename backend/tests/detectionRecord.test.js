@@ -69,6 +69,22 @@ describe('createDetectionRecord', () => {
     expect(createDetectionRecord(candidate, { rule: { query: 'x', lastTestResult: { eventsMatched: 3 } }, tuning: { applicable: true } }).status).toBe('tuned');
   });
 
+  test('defaults testCases/testSuiteResult when no rule has run a test suite', () => {
+    const record = createDetectionRecord(baseCandidate());
+    expect(record.testCases).toEqual({ positive: [], negative: [], edge: [] });
+    expect(record.testSuiteResult).toBeNull();
+  });
+
+  test('surfaces the rule\'s test cases and suite result once a test suite has run', () => {
+    const rule = {
+      lastTestCases: { positive: [{ id: 'p1' }], negative: [{ id: 'n1' }], edge: [] },
+      lastTestSuite: { counts: { total: 2, pass: 2, fail: 0, error: 0, skipped: 0 }, metrics: { precision: 1 } },
+    };
+    const record = createDetectionRecord(baseCandidate(), { rule });
+    expect(record.testCases.positive).toHaveLength(1);
+    expect(record.testSuiteResult.metrics.precision).toBe(1);
+  });
+
   test('includes the rule query/language and false-positive profile when a rule is supplied', () => {
     const candidate = baseCandidate();
     const rule = { query: 'event.outcome:"failure"', ruleType: 'kql', lastTestResult: { eventsMatched: 5 }, lastFpAnalysis: { falsePositiveRatePercent: 10 } };

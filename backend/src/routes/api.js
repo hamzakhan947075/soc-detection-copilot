@@ -13,6 +13,8 @@ const { STAGES } = require('../pipeline/stages');
 const { runDetectionEngine } = require('../detection-engine/detectionEngine');
 const { buildRule } = require('../rule-generation/ruleBuilder');
 const { testRule } = require('../testing/ruleTester');
+const { runTestSuite } = require('../testing/testCaseRunner');
+const { generateDefaultTestCases } = require('../testing/testCaseGenerator');
 const { analyzeFalsePositives } = require('../false-positive/fpAnalysis');
 const { recommendTuning } = require('../tuning/tuning');
 const { buildReport, toMarkdown, toCsv } = require('../reporting/reportGenerator');
@@ -411,6 +413,50 @@ router.post('/sessions/:sessionId/rules/:ruleId/test', requireSession, (req, res
   session.stage = 'validated';
 
   res.json({ testResult, fpAnalysis });
+});
+
+function sanitizeTestCase(tc, idx) {
+  if (!tc || typeof tc !== 'object' || typeof tc.expectedMatch !== 'boolean') return null;
+  return {
+    id: typeof tc.id === 'string' && tc.id.trim() ? tc.id.trim() : `analyst-${idx}`,
+    type: ['positive', 'negative', 'edge'].includes(tc.type) ? tc.type : 'edge',
+    expectedMatch: tc.expectedMatch,
+    description: typeof tc.description === 'string' ? tc.description : '',
+    event: tc.event && typeof tc.event === 'object' ? tc.event : {},
+    skip: Boolean(tc.skip),
+  };
+}
+
+// Labeled positive/negative/edge-case regression testing for a rule's own
+// logic - distinct from POST /test above, which checks match counts against
+// whatever dataset happens to be loaded. This asks "does the rule correctly
+// classify a set of known-good/known-bad/edge-case events", independent of
+// any one dataset, and computes precision/recall/F1/detection-rate/FP-rate
+// from a real confusion matrix (see testing/testCaseRunner.js).
+router.post('/sessions/:sessionId/rules/:ruleId/testsuite', requireSession, (req, res) => {
+  const session = req.session;
+  const rule = session.rules.get(req.params.ruleId);
+  if (!rule) {
+    res.status(404).json({ error: 'Rule not found.' });
+    return;
+  }
+
+  const { testCases: suppliedRaw, includeGenerated } = req.body || {};
+  const analystSupplied = Array.isArray(suppliedRaw) ? suppliedRaw.map(sanitizeTestCase).filter(Boolean) : [];
+
+  const samplePositiveEvent =
+    rule.lastTestResult && Array.isArray(rule.lastTestResult.matchedEvents) && rule.lastTestResult.matchedEvents.length > 0
+      ? rule.lastTestResult.matchedEvents[0].event
+      : null;
+  const generated = includeGenerated === false ? { positive: [], negative: [], edge: [] } : generateDefaultTestCases(rule.conditions, samplePositiveEvent);
+
+  const allCases = [...generated.positive, ...generated.negative, ...generated.edge, ...analystSupplied];
+  const suite = runTestSuite(rule.conditions, allCases);
+
+  rule.lastTestCases = { positive: generated.positive, negative: generated.negative, edge: generated.edge, analystSupplied };
+  rule.lastTestSuite = suite;
+
+  res.json({ testCases: rule.lastTestCases, ...suite });
 });
 
 router.get(

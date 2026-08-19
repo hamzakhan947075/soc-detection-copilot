@@ -128,6 +128,14 @@ describe('testRule', () => {
     expect(result.matchedEvents[0].event.destination.ip).toBe('203.0.113.9');
   });
 
+  test('a cidr condition never matches a malformed/unparseable IP, in either mode (regression: garbage no longer counts as "external")', () => {
+    const events = [{ '@timestamp': new Date().toISOString(), destination: { ip: 'not-an-ip-address' } }];
+    const inRule = { conditions: [{ field: 'destination.ip', cidr: { ranges: ['10.0.0.0/8'], mode: 'in' } }], threshold: null, groupingFields: [] };
+    const notInRule = { conditions: [{ field: 'destination.ip', cidr: { ranges: ['10.0.0.0/8'], mode: 'not_in' } }], threshold: null, groupingFields: [] };
+    expect(testRule(inRule, events).eventsMatched).toBe(0);
+    expect(testRule(notInRule, events).eventsMatched).toBe(0);
+  });
+
   test('combining an "in" source cidr with a "not_in" destination cidr reproduces internal-to-external matching', () => {
     const events = [
       { '@timestamp': new Date().toISOString(), source: { ip: '10.0.0.5' }, destination: { ip: '203.0.113.9' } }, // internal -> external: matches

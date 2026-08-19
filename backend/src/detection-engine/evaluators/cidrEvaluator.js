@@ -93,6 +93,12 @@ function ipv6InCidr(ip, cidr) {
   return (ipBig & mask) === (baseBig & mask);
 }
 
+/** True if `ip` parses as a well-formed IPv4 or IPv6 address. */
+function isValidIp(ip) {
+  if (!ip) return false;
+  return ip.includes(':') ? isIPv6(ip) : isIPv4(ip);
+}
+
 /** True if `ip` falls inside any CIDR in `cidrList`. IPv4 and IPv6 addresses/ranges are matched independently. */
 function isIpInCidrList(ip, cidrList) {
   if (!ip || !Array.isArray(cidrList)) return false;
@@ -141,6 +147,7 @@ function evaluateCidrDirection({ sourceIp, destinationIp, internalCidrs = DEFAUL
 }
 
 module.exports = {
+  isValidIp,
   isIpInCidrList,
   isInternalIp,
   evaluateCidrDirection,
