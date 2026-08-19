@@ -19,7 +19,15 @@ const { callProvider } = require('./providers');
 
 async function ask(prompt, options) {
   const settings = getEffectiveSettings();
-  return callProvider(settings, prompt, options);
+  const text = await callProvider(settings, prompt, options);
+  if (!text || !text.trim()) {
+    // Some models (e.g. reasoning models on a tight token budget) can return
+    // a technically-successful response with no usable content. Treat that
+    // as a failure so callers fall back to their deterministic text instead
+    // of showing a blank "AI" answer.
+    throw new Error('AI provider returned an empty response.');
+  }
+  return text;
 }
 
 /** Produces a short analyst-facing narrative for a detection candidate. */
@@ -54,7 +62,7 @@ async function suggestMappingNarrative(fieldMapping) {
           (confidence || 0) * 100
         )}% confidence.${examplesText} In one sentence, note what an analyst should double check before approving this mapping.`
       : `A raw log field named "${rawField}" from a security log could not be automatically mapped to any ECS (Elastic Common Schema) field.${examplesText} In one or two sentences, suggest the most likely ECS field it should map to (if any), or state that it is likely a custom, non-ECS field. Do not invent an ECS field name that does not exist in the real ECS spec.`;
-    const text = await ask(prompt, { maxTokens: 150 });
+    const text = await ask(prompt, { maxTokens: 400 });
     return { source: 'ai', text };
   } catch (err) {
     return { source: 'deterministic-fallback', text: fallbackText, error: err.message };
@@ -71,7 +79,7 @@ async function explainFalsePositives(rule, fpAnalysis) {
     const prompt = `A SOC detection rule named "${rule.ruleName}" was tested against real logs. Events tested: ${fpAnalysis.eventsTested}, matched: ${fpAnalysis.eventsMatched}, potential false positives: ${fpAnalysis.potentialFalsePositiveCount} (${fpAnalysis.falsePositiveRatePercent}%). Known false-positive scenarios for this detection type: ${JSON.stringify(
       rule.falsePositiveScenarios
     )}. In 2-3 sentences, advise the analyst on whether this false-positive rate is concerning and what to check first. Do not invent numbers not given above.`;
-    const text = await ask(prompt, { maxTokens: 250 });
+    const text = await ask(prompt, { maxTokens: 500 });
     return { source: 'ai', text };
   } catch (err) {
     return { source: 'deterministic-fallback', text: fallbackText, error: err.message };

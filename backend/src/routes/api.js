@@ -88,7 +88,11 @@ router.post(
     }
     try {
       const settings = aiConfigStore.getEffectiveSettings();
-      const text = await callProvider(settings, 'Reply with only the single word: OK', { maxTokens: 10 });
+      const text = await callProvider(settings, 'Reply with only the single word: OK', { maxTokens: 60 });
+      if (!text || !text.trim()) {
+        res.status(400).json({ success: false, error: 'The provider returned an empty response. Try a larger/non-reasoning model.' });
+        return;
+      }
       res.json({ success: true, reply: text.trim().slice(0, 100) });
     } catch (err) {
       res.status(400).json({ success: false, error: err.message });

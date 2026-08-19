@@ -61,9 +61,14 @@ function mergeWithFieldList(suggested, allFields) {
   const bySuggested = new Map(suggested.map((m) => [m.rawField, m]));
   return allFields.map((f) => {
     const s = bySuggested.get(f.field);
+    // Fields the backend didn't suggest a mapping for (no ecsCandidate) still
+    // carry a real status from field discovery - e.g. "excluded" for
+    // Elasticsearch hit metadata (_id, _index, ...) vs. genuinely "unmapped".
+    // Falling back to a hardcoded "unmapped" here would mislabel excluded
+    // fields and offer a pointless AI-check button on them.
     return s
       ? s
-      : { rawField: f.field, ecsField: null, ecsType: 'keyword', confidence: 0, status: 'unmapped' };
+      : { rawField: f.field, ecsField: null, ecsType: 'keyword', confidence: f.ecsConfidence || 0, status: f.ecsStatus || 'unmapped' };
   });
 }
 

@@ -41,17 +41,25 @@ function buildRequest(settings, prompt, maxTokens) {
   }
 
   // openai-chat covers Groq, OpenAI, and any other OpenAI-compatible API.
+  const body = {
+    model,
+    max_tokens: maxTokens,
+    messages: [{ role: 'user', content: prompt }],
+  };
+  // Groq's gpt-oss models spend part of max_tokens on hidden reasoning before
+  // producing message.content - on a short max_tokens budget that can burn
+  // through the whole budget and leave content empty. Keeping reasoning
+  // effort low avoids that without needing a very large token budget.
+  if (settings.provider === 'groq' && /^openai\/gpt-oss/i.test(model)) {
+    body.reasoning_effort = 'low';
+  }
   return {
     url: `${baseUrl}/chat/completions`,
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${settings.apiKey}`,
     },
-    body: {
-      model,
-      max_tokens: maxTokens,
-      messages: [{ role: 'user', content: prompt }],
-    },
+    body,
   };
 }
 

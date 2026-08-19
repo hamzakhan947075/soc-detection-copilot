@@ -1,7 +1,25 @@
 'use strict';
 
+const http = require('http');
 const { buildRequest, parseResponseText, AiConfigError } = require('../src/ai/providers');
 const aiConfigStore = require('../src/ai/aiConfigStore');
+const { explainDetection } = require('../src/ai/aiAssist');
+
+/** Spins up a tiny local OpenAI-compatible server so tests can exercise the
+ * real network path (callProvider/fetch) without hitting a real AI provider. */
+function startFakeOpenAiServer(responseBody) {
+  return new Promise((resolve) => {
+    const server = http.createServer((req, res) => {
+      let data = '';
+      req.on('data', (chunk) => (data += chunk));
+      req.on('end', () => {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(responseBody));
+      });
+    });
+    server.listen(0, '127.0.0.1', () => resolve(server));
+  });
+}
 
 describe('buildRequest (pure, no network)', () => {
   test('builds an Anthropic messages request', () => {
@@ -29,6 +47,21 @@ describe('buildRequest (pure, no network)', () => {
     expect(url).toBe('https://my-llm.example.com/v1/chat/completions');
   });
 
+  test('sets low reasoning effort for Groq gpt-oss models to avoid empty content', () => {
+    const { body } = buildRequest({ provider: 'groq', apiKey: 'gsk-test', model: 'openai/gpt-oss-120b' }, 'hi', 50);
+    expect(body.reasoning_effort).toBe('low');
+  });
+
+  test('does not set reasoning_effort for non-gpt-oss Groq models', () => {
+    const { body } = buildRequest({ provider: 'groq', apiKey: 'gsk-test', model: 'llama-3.1-8b-instant' }, 'hi', 50);
+    expect(body.reasoning_effort).toBeUndefined();
+  });
+
+  test('does not set reasoning_effort for other providers', () => {
+    const { body } = buildRequest({ provider: 'openai', apiKey: 'sk-test', model: 'gpt-4o-mini' }, 'hi', 50);
+    expect(body.reasoning_effort).toBeUndefined();
+  });
+
   test('rejects an unknown provider', () => {
     expect(() => buildRequest({ provider: 'not-a-real-provider', apiKey: 'x' }, 'hi', 10)).toThrow(AiConfigError);
   });
@@ -53,6 +86,39 @@ describe('parseResponseText', () => {
 
   test('returns empty string for an unexpected shape rather than throwing', () => {
     expect(parseResponseText('anthropic', {})).toBe('');
+  });
+});
+
+describe('aiAssist - empty AI response falls back to deterministic text', () => {
+  let server;
+
+  afterEach(() => {
+    aiConfigStore.clearRuntimeConfig();
+    if (server) {
+      server.close();
+      server = null;
+    }
+  });
+
+  test('a blank message.content from the provider is treated as a failure, not a valid AI answer', async () => {
+    server = await startFakeOpenAiServer({ choices: [{ message: { content: '   ' } }] });
+    const { port } = server.address();
+    aiConfigStore.setRuntimeConfig({ provider: 'custom', apiKey: 'k', model: 'test-model', baseUrl: `http://127.0.0.1:${port}` });
+
+    const result = await explainDetection({ name: 'Test Detection', category: 'auth', description: 'desc', evidence: [] });
+    expect(result.source).toBe('deterministic-fallback');
+    expect(result.text).toContain('Test Detection');
+    expect(result.error).toMatch(/empty/i);
+  });
+
+  test('a real answer from the provider is used as-is', async () => {
+    server = await startFakeOpenAiServer({ choices: [{ message: { content: 'A real explanation.' } }] });
+    const { port } = server.address();
+    aiConfigStore.setRuntimeConfig({ provider: 'custom', apiKey: 'k', model: 'test-model', baseUrl: `http://127.0.0.1:${port}` });
+
+    const result = await explainDetection({ name: 'Test Detection', category: 'auth', description: 'desc', evidence: [] });
+    expect(result.source).toBe('ai');
+    expect(result.text).toBe('A real explanation.');
   });
 });
 
