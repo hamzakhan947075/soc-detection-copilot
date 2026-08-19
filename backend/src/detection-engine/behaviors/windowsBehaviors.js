@@ -46,7 +46,7 @@ function detectEncodedPowerShell(events) {
       matchedEventIndexes: matches.map((e) => e.index),
       evidence: matches.slice(0, 5).map((e) => truncate(commandText(e))),
       ruleConditions: [
-        { field: 'process.name', value: 'powershell.exe' },
+        { field: 'process.name', value: 'powershell.exe', exact: true },
         { field: 'process.command_line', values: ['-enc', 'encodedcommand', 'frombase64string'] },
       ],
     }),
@@ -68,7 +68,7 @@ function detectSuspiciousPowerShell(events) {
       matchedEventIndexes: matches.map((e) => e.index),
       evidence: matches.slice(0, 5).map((e) => truncate(commandText(e))),
       ruleConditions: [
-        { field: 'process.name', value: 'powershell.exe' },
+        { field: 'process.name', value: 'powershell.exe', exact: true },
         { field: 'process.command_line', values: ['downloadstring', 'downloadfile', 'bypass', 'windowstyle hidden'] },
       ],
     }),

@@ -108,7 +108,7 @@ function detectSuspiciousOutbound(events) {
       mitreHint: 'c2_communication',
       matchedEventIndexes: matches.map((e) => e.index),
       evidence: matches.slice(0, 5).map((e) => `${e.flat['source.ip']} -> ${e.flat['destination.ip']}:${e.flat['destination.port']}`),
-      ruleConditions: [{ field: 'destination.port', values: ['4444', '1337', '6666', '31337', '8081', '8888'] }],
+      ruleConditions: [{ field: 'destination.port', values: ['4444', '1337', '6666', '31337', '8081', '8888'], exact: true }],
     })
   );
   return candidates;

@@ -57,6 +57,15 @@ function matchesConditions(flat, conditions) {
     if (c.exists) return true;
     const haystack = String(value).toLowerCase();
     const candidates = Array.isArray(c.values) && c.values.length > 0 ? c.values : [c.value];
+    // Most conditions intentionally match as a substring/term search - they
+    // come from a regex- or stem-based detection over free text (message,
+    // process.command_line) or a deliberately partial match (e.g. "den" to
+    // catch "denied"/"deny"). A condition can opt into `exact: true` for
+    // fields where a partial match is a false positive by definition - an
+    // identity field (user.name, process.name) or a numeric field
+    // (destination.port), where "root" matching "rootkit" or port 4444
+    // matching 14444 would be wrong, not lenient.
+    if (c.exact) return candidates.some((v) => haystack === String(v).toLowerCase());
     return candidates.some((v) => haystack.includes(String(v).toLowerCase()));
   });
 }

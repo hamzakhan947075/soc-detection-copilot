@@ -46,7 +46,7 @@ function detectRootLogin(events) {
       mitreHint: 'valid_accounts',
       matchedEventIndexes: matches.map((e) => e.index),
       evidence: matches.slice(0, 5).map((e) => `source.ip=${e.flat['source.ip'] || 'unknown'}`),
-      ruleConditions: [{ field: 'user.name', value: 'root' }],
+      ruleConditions: [{ field: 'user.name', value: 'root', exact: true }],
     }),
   ];
 }

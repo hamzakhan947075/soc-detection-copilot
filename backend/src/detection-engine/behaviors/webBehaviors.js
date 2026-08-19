@@ -97,7 +97,7 @@ function detectAuthAbuse(events) {
       mitreHint: 'brute_force',
       matchedEventIndexes: matches.map((e) => e.index),
       evidence: matches.slice(0, 5).map((e) => `${e.flat['source.ip']} ${e.flat['url.path']} -> ${e.flat['http.response.status_code']}`),
-      ruleConditions: [{ field: 'http.response.status_code', values: ['401', '403'] }],
+      ruleConditions: [{ field: 'http.response.status_code', values: ['401', '403'], exact: true }],
     }),
   ];
 }

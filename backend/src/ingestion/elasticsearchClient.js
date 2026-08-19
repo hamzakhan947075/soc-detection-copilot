@@ -35,10 +35,25 @@ function assertConfigured() {
   }
 }
 
+/**
+ * A raw network-level fetch failure (DNS resolution, connection refused,
+ * TLS handshake error, timeout) can carry internal detail in its message or
+ * `cause` (hostnames, ports, stack-adjacent text) depending on the Node/
+ * undici version - never propagate it to the client. Same pattern as
+ * ai/providers.js's callProvider, for the same reason.
+ */
+async function safeFetch(url, options) {
+  try {
+    return await fetch(url, options);
+  } catch (_err) {
+    throw new Error('Could not reach the Elasticsearch cluster (network error). Check ELASTICSEARCH_URL and network connectivity.');
+  }
+}
+
 async function testConnection() {
   assertConfigured();
   const auth = buildAuthHeader();
-  const res = await fetch(new URL('/', config.elasticsearch.url), {
+  const res = await safeFetch(new URL('/', config.elasticsearch.url), {
     headers: auth ? { Authorization: auth } : {},
   });
   if (!res.ok) {
@@ -51,7 +66,7 @@ async function testConnection() {
 async function listIndices() {
   assertConfigured();
   const auth = buildAuthHeader();
-  const res = await fetch(new URL('/_cat/indices?format=json', config.elasticsearch.url), {
+  const res = await safeFetch(new URL('/_cat/indices?format=json', config.elasticsearch.url), {
     headers: auth ? { Authorization: auth } : {},
   });
   if (!res.ok) throw new Error(`Failed to list indices (status ${res.status})`);
@@ -76,7 +91,7 @@ async function fetchLogs({ index, from, to, size = 1000 } = {}) {
     sort: [{ '@timestamp': 'desc' }],
   };
 
-  const res = await fetch(new URL(`/${encodeURIComponent(targetIndex)}/_search`, config.elasticsearch.url), {
+  const res = await safeFetch(new URL(`/${encodeURIComponent(targetIndex)}/_search`, config.elasticsearch.url), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

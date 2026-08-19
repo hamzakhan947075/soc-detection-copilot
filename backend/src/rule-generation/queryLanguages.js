@@ -13,6 +13,12 @@
  *                                (used for cardinality-only signals like
  *                                port scanning, where no specific value
  *                                matters)
+ * Any of the above may also carry `exact: true`, which only affects how
+ * testing/ruleTester.js matches it against events (a substring match would
+ * be a false positive for this field - e.g. an identity field like
+ * user.name/process.name, or a numeric field like destination.port). It has
+ * no effect on the rendered query text below, since KQL/Lucene phrase
+ * matches and EQL/ES|QL `==` comparisons are already exact per-language.
  * Every value is escaped for its target language so generated queries can
  * never break out of a string literal, regardless of what characters
  * appear in a detection's evidence.

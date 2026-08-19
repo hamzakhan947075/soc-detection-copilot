@@ -112,6 +112,31 @@ describe('End-to-end pipeline smoke test via API', () => {
     expect(testRes.body.testResult.eventsMatched).toBeGreaterThan(0);
     expect(testRes.body.fpAnalysis.likelyTruePositiveCount).toBeGreaterThan(0);
   });
+
+  test('a rule generated for an identity-based detection (root login) does not count a similarly-named user as a match', async () => {
+    // Regression test: rule testing used to match conditions as a
+    // case-insensitive substring, so a rule for user.name "root" would also
+    // match a user named "rootkit" - inflating the reported match count with
+    // a false positive baked into the test itself. ruleConditions for
+    // identity fields now carry exact: true.
+    const events = [
+      { '@timestamp': '2026-08-19T10:00:00Z', user: { name: 'root' }, event: { outcome: 'success' }, source: { ip: '10.0.0.5' } },
+      { '@timestamp': '2026-08-19T10:01:00Z', user: { name: 'rootkit' }, event: { outcome: 'success' }, source: { ip: '10.0.0.6' } },
+    ];
+    const loadRes = await request(app)
+      .post('/api/sessions')
+      .send({ text: events.map((e) => JSON.stringify(e)).join('\n'), filename: 'root-login.ndjson' });
+    const { sessionId } = loadRes.body;
+    await request(app).post(`/api/sessions/${sessionId}/normalize`);
+    const detectRes = await request(app).post(`/api/sessions/${sessionId}/detect`);
+    const rootLogin = detectRes.body.detections.find((d) => d.name === 'Direct Root Login');
+    expect(rootLogin).toBeDefined();
+    expect(rootLogin.matchedEventIndexes).toEqual([0]);
+
+    const ruleRes = await request(app).post(`/api/sessions/${sessionId}/rules`).send({ detectionId: rootLogin.id, ruleType: 'kql' });
+    const testRes = await request(app).post(`/api/sessions/${sessionId}/rules/${ruleRes.body.ruleId}/test`);
+    expect(testRes.body.testResult.eventsMatched).toBe(1);
+  });
 });
 
 describe('AI config API', () => {

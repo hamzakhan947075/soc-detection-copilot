@@ -77,6 +77,34 @@ describe('testRule', () => {
     expect(scanner.passesThreshold).toBe(true);
     expect(repeater.passesThreshold).toBe(false);
   });
+
+  test('a plain (non-exact) condition matches as a substring, by design (e.g. free-text/stem matches)', () => {
+    const events = [{ '@timestamp': new Date().toISOString(), event: { action: 'denied' } }];
+    const rule = { conditions: [{ field: 'event.action', values: ['den', 'block', 'drop'] }], threshold: null, groupingFields: [] };
+    const result = testRule(rule, events);
+    expect(result.eventsMatched).toBe(1);
+  });
+
+  test('an exact condition does not treat a different identity as a match (regression: "root" no longer matches "rootkit")', () => {
+    const events = [{ '@timestamp': new Date().toISOString(), user: { name: 'rootkit' } }];
+    const rule = { conditions: [{ field: 'user.name', value: 'root', exact: true }], threshold: null, groupingFields: [] };
+    const result = testRule(rule, events);
+    expect(result.eventsMatched).toBe(0);
+  });
+
+  test('an exact condition still matches the identical value', () => {
+    const events = [{ '@timestamp': new Date().toISOString(), user: { name: 'root' } }];
+    const rule = { conditions: [{ field: 'user.name', value: 'root', exact: true }], threshold: null, groupingFields: [] };
+    const result = testRule(rule, events);
+    expect(result.eventsMatched).toBe(1);
+  });
+
+  test('an exact numeric condition does not treat a superset port as a match (regression: port 4444 no longer matches 14444)', () => {
+    const events = [{ '@timestamp': new Date().toISOString(), destination: { port: 14444 } }];
+    const rule = { conditions: [{ field: 'destination.port', values: ['4444'], exact: true }], threshold: null, groupingFields: [] };
+    const result = testRule(rule, events);
+    expect(result.eventsMatched).toBe(0);
+  });
 });
 
 describe('analyzeFalsePositives', () => {

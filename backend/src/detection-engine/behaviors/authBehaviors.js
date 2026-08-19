@@ -137,7 +137,7 @@ function detectPrivilegedAuth(events) {
         recommendedThreshold: null,
         matchedEventIndexes: group.map((e) => e.index),
         evidence: [`user=${user}`, `events=${group.length}`],
-        ruleConditions: [{ field: 'user.name', value: user }],
+        ruleConditions: [{ field: 'user.name', value: user, exact: true }],
       })
     );
   }
