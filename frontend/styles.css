@@ -192,6 +192,7 @@ pre { background: var(--bg-0); border: 1px solid var(--border); border-radius: 8
 .badge.custom { background: rgba(79,156,249,0.15); color: var(--blue); }
 .badge.unsupported { background: rgba(255,159,67,0.12); color: var(--high); font-style: italic; }
 .badge.neutral { background: var(--bg-3); color: var(--text-1); }
+.badge.ai-suggested { background: rgba(79,156,249,0.15); color: var(--blue); }
 
 .confidence-bar { width: 60px; height: 5px; background: var(--bg-3); border-radius: 3px; overflow: hidden; display: inline-block; vertical-align: middle; margin-right: 6px; }
 .confidence-bar > span { display: block; height: 100%; background: var(--accent); }

@@ -1,7 +1,8 @@
 # Production Maturity Assessment
 
-Last verified: 2026-08-19, against the E2E-test-suite addition after
-Milestone 14 (commit `038b63b` plus the `e2e/` suite added on top of it).
+Last verified: 2026-08-19, after adding AI-suggested detections on top of
+Milestone 14 (commit `3f86aa6` plus the AI-suggested-detections feature and
+its tests added on top of it).
 
 This document is deterministic, not a subjective score: every line below
 is either a command you can re-run yourself or a specific file/line
@@ -28,9 +29,9 @@ on Node 18.x and 20.x.
 
 | Fact | Status |
 |---|---|
-| Backend unit/integration tests | 313 passing, 0 failing (`cd backend && npm test`) |
-| Frontend unit tests | 38 passing, 0 failing (`cd frontend && npm test`) |
-| End-to-end tests (real Chromium) | 6 passing, 0 failing (`cd e2e && npm test`) - full pipeline golden path, opt-in-auth login/logout, and 3 frontend error paths, each driven against a real running backend |
+| Backend unit/integration tests | 327 passing, 0 failing (`cd backend && npm test`) |
+| Frontend unit tests | 39 passing, 0 failing (`cd frontend && npm test`) |
+| End-to-end tests (real Chromium) | 8 passing, 0 failing (`cd e2e && npm test`) - full pipeline golden path, opt-in-auth login/logout, AI-suggested detections against a stubbed real AI provider, and 3 frontend error paths, each driven against a real running backend |
 | Backend lint | 0 errors, 0 warnings (`cd backend && npm run lint`) |
 | Backend/frontend/e2e dependency audits | 0 vulnerabilities at any severity, all three `package.json`s |
 | CI | 5 jobs (lint+test, frontend-test, e2e-test, security-audit, boot-smoke-test), each on Node 18.x and 20.x where applicable |
@@ -67,10 +68,39 @@ Real, tested, and live-verified - but deliberately minimal:
 - No server-side session table, so no way to revoke one session early - only `SESSION_SECRET` rotation (invalidates every session, including the caller's own) or the 12-hour TTL.
 - This is the right scope for a single-analyst tool. It is the **wrong** scope for a multi-user SOC team sharing one deployment - that would need real per-user accounts, which this project does not have and was never scoped to build.
 
+## AI-suggested detections - the one deliberate exception to deterministic-first
+
+Every other AI feature in this app is narrative-only and cannot alter a
+detection, mapping, rule, or lifecycle status - see
+[ARCHITECTURE.md](ARCHITECTURE.md#why-deterministic-first). AI-suggested
+detections (`POST /sessions/:id/detect/ai-suggested`) are the sole,
+deliberate exception: an analyst can opt in to having AI propose additional
+detection candidates from a real sample of this session's normalized data.
+
+- **Additive, not a replacement.** The deterministic behavior catalog is
+  completely unaffected; this is a separate, explicitly-triggered action,
+  and the app works identically with no AI key configured (the route 400s
+  with a clear `ai_not_configured` code instead of silently doing nothing).
+- **Two deterministic gates before anything reaches a session**, both
+  covered by real tests (`backend/tests/aiDetectionSuggestor.test.js`,
+  `e2e/tests/ai-detections.spec.js`): field/shape validation against the
+  real ECS fields present in the dataset (a hallucinated field gets that
+  condition dropped, not substituted), and re-evaluation of every surviving
+  candidate's conditions against the real normalized events with the same
+  matcher (`testing/ruleTester.js`) every generated rule is tested with - a
+  candidate that doesn't actually match a real event is dropped.
+- **Always visibly labeled** - a "✨ AI-suggested" badge in the UI
+  (`frontend/js/tabs/detection.js`), `source: 'ai'` on the underlying
+  object - never presented as indistinguishable from a deterministic
+  behavior-catalog detection.
+- **What it can't do**: prove a real, matching pattern is actually
+  malicious rather than coincidental - only that the pattern genuinely
+  exists in the data. It's a hypothesis-generation aid, not a decision.
+
 ## Frontend
 
-- 38 unit tests cover the pure/testable layer (`escapeHtml` and badge helpers, `state.js`'s `resolveStage()`, `api.js`'s error-handling contract, `pipelineBar.js`'s stage classification).
-- 6 real-browser E2E tests (`e2e/`, Playwright + Chromium) cover the golden path and the auth login/logout flow against a real running backend - not a mock, not jsdom.
+- 39 unit tests cover the pure/testable layer (`escapeHtml` and badge helpers, `state.js`'s `resolveStage()`, `api.js`'s error-handling contract, `pipelineBar.js`'s stage classification).
+- 8 real-browser E2E tests (`e2e/`, Playwright + Chromium) cover the golden path, the auth login/logout flow, and AI-suggested detections against a stubbed real AI provider, all against a real running backend - not a mock, not jsdom.
 - All 13 tab modules now show an in-body error box on a failed API call (audited and closed in Milestone 13 - 7 of 13 were missing it before).
 - No frontend build step, no bundler, no framework - by design, not as a gap to fill later.
 
@@ -92,5 +122,5 @@ In priority order, the gaps that would actually matter:
 
 None of these are secretly broken today; they are scope boundaries this
 project was never built past. Closing #1 was this project's Milestone 11;
-#2 went from zero frontend tests to 38 unit tests plus a 6-test real-browser
-E2E suite covering the golden path and auth flow.
+#2 went from zero frontend tests to 39 unit tests plus an 8-test real-browser
+E2E suite covering the golden path, auth flow, and AI-suggested detections.

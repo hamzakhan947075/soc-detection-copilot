@@ -116,6 +116,68 @@ describe('End-to-end pipeline smoke test via API', () => {
     expect(reportRes.text).toContain('Detection Engineering Report');
   });
 
+  test('AI-suggested detections (opt-in, additive) require AI configured and never remove the deterministic ones', async () => {
+    const loadRes = await request(app).post('/api/samples/ssh_auth/load');
+    const { sessionId } = loadRes.body;
+    await request(app).post(`/api/sessions/${sessionId}/normalize`);
+    const detectRes = await request(app).post(`/api/sessions/${sessionId}/detect`);
+    const deterministicCount = detectRes.body.detections.length;
+    expect(deterministicCount).toBeGreaterThan(0);
+
+    // With no AI configured, the endpoint is a clear 400, not a silent no-op or a crash.
+    const noAiRes = await request(app).post(`/api/sessions/${sessionId}/detect/ai-suggested`);
+    expect(noAiRes.status).toBe(400);
+    expect(noAiRes.body.code).toBe('ai_not_configured');
+
+    const http = require('http');
+    const server = http.createServer((req, res) => {
+      let data = '';
+      req.on('data', (chunk) => (data += chunk));
+      req.on('end', () => {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(
+          JSON.stringify({
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify([
+                    {
+                      name: 'AI-observed pattern',
+                      description: 'A pattern the AI observed in the real normalized sample.',
+                      category: 'authentication',
+                      severity: 'medium',
+                      confidence: 0.7,
+                      ruleConditions: [{ field: 'event.outcome', value: 'failure', exact: true }],
+                    },
+                  ]),
+                },
+              },
+            ],
+          })
+        );
+      });
+    });
+    await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+    try {
+      aiConfigStore.setRuntimeConfig({ provider: 'custom', apiKey: 'k', model: 'test-model', baseUrl: `http://127.0.0.1:${server.address().port}` });
+
+      const aiRes = await request(app).post(`/api/sessions/${sessionId}/detect/ai-suggested`);
+      expect(aiRes.status).toBe(200);
+      expect(aiRes.body.acceptedCount).toBe(1);
+      expect(aiRes.body.detections[0].source).toBe('ai');
+
+      // Additive: the session's detection list now has the deterministic
+      // ones plus the AI one, and the deterministic ones are unchanged.
+      const listRes = await request(app).get(`/api/sessions/${sessionId}/detections`);
+      expect(listRes.body.detections.length).toBe(deterministicCount + 1);
+      expect(listRes.body.detections.filter((d) => d.source === 'ai').length).toBe(1);
+      expect(listRes.body.detections.some((d) => d.name.includes('Brute Force'))).toBe(true);
+    } finally {
+      aiConfigStore.clearRuntimeConfig();
+      await new Promise((resolve) => server.close(resolve));
+    }
+  });
+
   test('a rule generated for a pattern-based detection (reverse shell) actually matches the events that triggered it', async () => {
     // Regression test: rule generation used to fall back to a generic
     // event.category filter unrelated to how the detection actually fired,

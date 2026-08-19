@@ -12,6 +12,7 @@ const { ingest, defaultMappings, normalizeAll } = require('../pipeline/pipelineO
 const { createSession, getSession } = require('../pipeline/sessionStore');
 const { STAGES } = require('../pipeline/stages');
 const { runDetectionEngine } = require('../detection-engine/detectionEngine');
+const { suggestAiDetections } = require('../detection-engine/aiDetectionSuggestor');
 const { buildRule } = require('../rule-generation/ruleBuilder');
 const { testRule } = require('../testing/ruleTester');
 const { runTestSuite } = require('../testing/testCaseRunner');
@@ -278,6 +279,40 @@ router.post('/sessions/:sessionId/detect', requireSession, (req, res) => {
 router.get('/sessions/:sessionId/detections', requireSession, (req, res) => {
   res.json({ detections: req.session.detections || [] });
 });
+
+// AI-suggested detections are additive, not a replacement: the deterministic
+// behaviors/*.js catalog above is unaffected and this route is a no-op
+// unless the analyst explicitly calls it with AI configured. Every candidate
+// it returns has already been deterministically re-verified against the
+// real dataset (aiDetectionSuggestor.js) before landing in session.detections
+// - the AI proposes a pattern shape, it never single-handedly decides a
+// detection is real.
+router.post(
+  '/sessions/:sessionId/detect/ai-suggested',
+  requireSession,
+  asyncHandler(async (req, res) => {
+    const session = req.session;
+    if (!session.normalizedEvents) {
+      res.status(409).json({ error: 'Dataset has not been normalized yet. Call POST /normalize first.' });
+      return;
+    }
+    if (!aiEnabled()) {
+      res.status(400).json({ error: 'AI is not configured. Set an API key in Settings or via an environment variable to use AI-suggested detections.', code: 'ai_not_configured' });
+      return;
+    }
+    try {
+      const result = await suggestAiDetections(session.normalizedEvents);
+      session.detections = [...(session.detections || []), ...result.detections];
+      if (session.stage === 'normalized') session.stage = 'detected';
+      res.json(result);
+    } catch (err) {
+      // Structured provider errors (ai/aiErrors.js) carry a stable `code` so
+      // the UI can distinguish "bad key"/"rate limited"/"provider is down"
+      // from a plain parse failure, same as the /ai/test route.
+      res.status(400).json({ error: err.message, code: err.code || null, retryable: Boolean(err.retryable) });
+    }
+  })
+);
 
 router.get(
   '/sessions/:sessionId/detections/:detectionId/explain',

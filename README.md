@@ -6,7 +6,7 @@
 Take raw logs exported from Elastic — or uploaded/pasted from anywhere — and run them through a real, end-to-end detection engineering workflow: field discovery, ECS mapping, behavioral detection, MITRE ATT&CK mapping, rule generation, testing, false-positive analysis, and tuning.
 
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen)
-![Tests](https://img.shields.io/badge/tests-357%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-374%20passing-brightgreen)
 ![No build step](https://img.shields.io/badge/frontend-vanilla%20JS%2C%20no%20build%20step-blue)
 ![Deterministic core](https://img.shields.io/badge/core%20logic-deterministic-informational)
 ![Status](https://img.shields.io/badge/status-active-success)
@@ -74,6 +74,7 @@ flowchart LR
 - 🧭 **Analyst-in-the-loop ECS mapping** — every suggestion shows its confidence and reasoning, and can be overridden before normalization. Six meaningful statuses, not just "mapped/unmapped": `confident`, `uncertain`, `custom` (a real application field - not an ECS gap), `unsupported` (array/object value, needs manual transformation), `excluded` (Elasticsearch's own metadata), `unmapped` (a genuine schema gap under a real ECS namespace) - and mapping coverage % is never penalized by an analyst's own custom fields
 - 🕵️ **6 behavior families, 25+ individual detections** — brute force, password spraying, privileged auth, reverse shells, suspicious sudo, encoded/suspicious PowerShell, LOLBins, credential dumping, persistence (services/scheduled tasks/registry run keys/cron), port scanning, DNS tunneling, C2 beaconing, SQLi/XSS/path traversal/web shells, and firewall anomalies
 - 🧮 **Real deterministic evaluators** for the three hardest signals — CIDR internal/external direction (IPv4+IPv6, configurable ranges), DNS-tunneling entropy/length/character-distribution, and C2 beaconing timing regularity — each returns structured, explainable evidence (`detection-engine/evaluators/`), no LLM involved
+- ✨ **AI-suggested detections (opt-in, additive)** — beyond the fixed behavior catalog above, an analyst can ask AI to propose additional detections from a real sample of this dataset's normalized events. Every proposed pattern is deterministically re-verified before it ever reaches the UI: field names are checked against what's actually in the data (a hallucinated field gets that condition dropped), and the proposed conditions are re-run against the real events with the same matcher every generated rule is tested with - a pattern that doesn't actually match anything real is discarded, not shown. Always labeled with a visible "✨ AI-suggested" badge; the deterministic catalog above is completely unaffected and the app works with no AI key configured, same as everywhere else
 - 🗳️ **Real detection lifecycle** — draft → generated → validated → tested → tuned → approved → production → deprecated, persisted to SQLite so a decision survives a restart, with an enforced guard (e.g. you cannot approve a detection that's never been tested) and a full audit trail per detection
 - 🎯 **MITRE ATT&CK mapping** that never overstates confidence
 - 📝 **5 query languages** generated per detection: KQL, ES\|QL, EQL, Lucene, Sigma
@@ -83,7 +84,7 @@ flowchart LR
 - 📉 **Evidence-based false-positive breakdown & verified tuning** — potential FPs are ranked by which field/value pairs (and users/hosts/processes/destinations) actually recur among them, with "consider excluding X" suggestions computed from real counts, never applied automatically. Tuning re-verifies the false-positive rate *and* that true positives survive at the suggested threshold - raising a threshold high enough to match nothing is never reported as an improvement
 - 📊 **SOC-style dashboard** — logs processed, mapping coverage, detections, rules validated, MITRE technique count, high-risk findings
 - 🌓 **Dark SOC/SIEM-themed UI** — 13 tabs, no build step, no framework
-- ✨ **Multi-provider AI assist, hardened** — Claude, Groq, OpenAI, or any other OpenAI-compatible API; configure via environment variables or paste a key straight into the **Settings** tab (session-memory only, never written to disk, always masked when shown back). Every call has a request timeout and a bounded retry policy with backoff for transient failures (network error, 429 rate limit, 5xx) - auth errors are never retried, and every failure carries a stable error code (`timeout`/`network`/`rate_limited`/`auth`/`server_error`), not just a message. Powers optional "Explain with AI" buttons on detections, ECS mappings, and false-positive analysis — every one of them has a deterministic fallback when no key is set or a call fails, and AI output is narrative-only: it can never alter a detection's severity/confidence/MITRE mapping, an ECS mapping, a rule's conditions/query, a test result, or a persisted lifecycle status
+- ✨ **Multi-provider AI assist, hardened** — Claude, Groq, OpenAI, or any other OpenAI-compatible API; configure via environment variables or paste a key straight into the **Settings** tab (session-memory only, never written to disk, always masked when shown back). Every call has a request timeout and a bounded retry policy with backoff for transient failures (network error, 429 rate limit, 5xx) - auth errors are never retried, and every failure carries a stable error code (`timeout`/`network`/`rate_limited`/`auth`/`server_error`), not just a message. Powers optional "Explain with AI" buttons on detections, ECS mappings, and false-positive analysis (every one has a deterministic fallback when no key is set or a call fails, and can never alter a detection's severity/confidence/MITRE mapping, an ECS mapping, a rule's conditions/query, a test result, or a persisted lifecycle status) plus the AI-suggested-detections feature above, which is the one deliberate, narrow, deterministically-re-verified exception to that rule - see [ARCHITECTURE.md](ARCHITECTURE.md#why-deterministic-first)
 - 🔒 **Security-first**: upload allowlisting/size limits, bounded JSON parsing, catastrophic-backtracking-safe regexes, escaped/validated (never executed) query generation, rate limiting, env-var-only secrets, prototype-pollution guards on every analyst-editable field path, SSRF blocking on the custom AI endpoint, and a hard timeout on every outbound network call (AI provider, Elasticsearch)
 - 🔑 **Opt-in authentication** — set one env var (`APP_PASSWORD`) to require a login for every API route and, functionally, the whole UI. A signed, `HttpOnly` session cookie, constant-time password comparison, never echoed back. Unset by default for zero-config local use, with a clear startup warning either way
 
@@ -120,8 +121,9 @@ Any other Node host works the same way (Railway, Fly.io, a plain VPS with `pm2`/
 
 ```bash
 cd backend
-npm test              # 313 tests across parsing, field discovery, ECS
-                       # mapping, detection engine, MITRE mapping, rule
+npm test              # 327 tests across parsing, field discovery, ECS
+                       # mapping, detection engine (deterministic and
+                       # AI-suggested), MITRE mapping, rule
                        # generation/validation, rule testing, false-positive
                        # analysis, tuning, AI provider config, API/upload
                        # security, auth, and structured request logging
@@ -145,12 +147,13 @@ npm test              # 38 tests (Node's built-in test runner + jsdom, no
 ```bash
 cd e2e
 npm install && npx playwright install --with-deps chromium   # one-time
-npm test               # 6 tests, real Chromium against two real backend
+npm test               # 8 tests, real Chromium against three real backend
                         # instances (playwright.config.js starts/stops them) -
                         # the full pipeline golden path (sample dataset through
                         # a rule to an exported report), the opt-in-auth
-                        # login/logout flow, and a couple of frontend error
-                        # paths, all driven exactly as a person would click.
+                        # login/logout flow, AI-suggested detections against a
+                        # stubbed real AI provider, and a couple of frontend
+                        # error paths, all driven exactly as a person would click.
 ```
 
 ## Project layout
@@ -166,7 +169,8 @@ backend/
     log-source-id/     declarative log-source signatures + scorer
     normalization/     raw event -> normalized ECS event
     detection-engine/  behaviors/{auth,linux,windows,network,web,firewall}.js,
-                       evaluators/{cidr,dnsTunneling,c2Beaconing}Evaluator.js
+                       evaluators/{cidr,dnsTunneling,c2Beaconing}Evaluator.js,
+                       aiDetectionSuggestor.js (opt-in, additive, deterministically re-verified)
     detections/        canonical Detection record + lifecycle state machine (draft..production)
     persistence/       SQLite-backed detection lifecycle store (db.js, detectionStore.js)
     mitre/             static hint -> {tactic, technique} lookup
@@ -186,7 +190,7 @@ backend/
     pipeline/          session store + orchestration + pipeline stage metadata
     routes/            Express API
   sample-data/         8 bundled sample datasets
-  tests/               313 tests (see above)
+  tests/               327 tests (see above)
   scripts/lint.js       runs ESLint via its Node API against the repo root
                        config, so `npm run lint` works whether invoked from
                        backend/ or CI
@@ -200,10 +204,11 @@ frontend/
                        ATT&CK, Rule Builder, Rule Testing, False Positive
                        Analysis, Detection Tuning, Investigation, Reports,
                        Settings
-  tests/                 38 unit tests for the pure/testable frontend layer (Node's built-in test runner + jsdom)
+  tests/                 39 unit tests for the pure/testable frontend layer (Node's built-in test runner + jsdom)
   index.html, styles.css   dark SOC/SIEM-styled UI, no build step
-e2e/                    6 real-browser end-to-end tests (Playwright + Chromium):
-                        golden path, opt-in-auth login/logout, frontend error paths
+e2e/                    8 real-browser end-to-end tests (Playwright + Chromium):
+                        golden path, opt-in-auth login/logout, AI-suggested
+                        detections against a stubbed provider, frontend error paths
 ARCHITECTURE.md         data flow, design rationale, security posture
 ```
 
@@ -239,7 +244,8 @@ The frontend talks to a REST API under `/api` — see `backend/src/routes/api.js
 | `GET /api/sessions/:id/fields` | Field discovery results |
 | `PUT /api/sessions/:id/mappings` | Set analyst-approved ECS mappings |
 | `POST /api/sessions/:id/normalize` | Build normalized ECS events |
-| `POST /api/sessions/:id/detect` | Run detection engineering analysis |
+| `POST /api/sessions/:id/detect` | Run detection engineering analysis (deterministic behavior catalog) |
+| `POST /api/sessions/:id/detect/ai-suggested` | Ask AI to propose additional detections from a real sample of this session's normalized data - additive to (never replaces) the deterministic results; every proposed candidate is re-verified against real events before being added. 400s with `code: "ai_not_configured"` if no AI provider is set up |
 | `POST /api/sessions/:id/rules` | Generate a rule (`{detectionId, ruleType, indexPattern, severityOverride}`) |
 | `POST /api/sessions/:id/rules/:ruleId/test` | Test a rule against the loaded dataset |
 | `POST /api/sessions/:id/rules/:ruleId/testsuite` | Run/extend a labeled positive/negative/edge-case suite (`{testCases?, includeGenerated?}`) → PASS/FAIL/ERROR/SKIPPED per case + confusion matrix + precision/recall/F1/detection-rate/FP-rate |
@@ -275,7 +281,8 @@ The frontend talks to a REST API under `/api` — see `backend/src/routes/api.js
 - Log source identification and ECS mapping are confidence-scored heuristics, not guaranteed-correct — the UI always shows confidence and reasoning, and never presents an uncertain mapping or MITRE technique as definitive.
 - **Detection lifecycle persistence is real but narrow, not general persistence.** A detection's approval/production status and version history now survive a restart via SQLite (`persistence/`) - but everything else (parsed events, mappings, normalized events, in-session detections/rules/test results) is still in-memory only, and on Render's free tier the SQLite file itself doesn't survive a deploy/spin-down unless it's on a mounted persistent disk.
 - **The positive/negative/edge test-case framework validates a rule's own logic in isolation, not real-world coverage.** Auto-generated cases prove the rule matches what it says it matches and doesn't match an obviously different value - they cannot tell you whether the rule covers every real attacker variation, only whether its stated conditions behave as claimed.
-- **Frontend test coverage is real but not exhaustive.** 38 unit tests (`frontend/tests/`, Node's built-in test runner + jsdom, no bundler) cover the pure/testable layer - `escapeHtml`/badge helpers, `resolveStage`'s pipeline-stage ladder, `api.js`'s error-taxonomy contract, and the pipeline-bar's done/current classification. On top of that, `e2e/` (Playwright + a real Chromium browser) drives the actual served UI against a real running backend: one test walks the entire pipeline from loading a sample dataset through generating, testing, and exporting a rule report; another exercises the opt-in-auth login/logout flow; a third checks a couple of frontend error paths. That's real coverage of the golden path and the auth flow, but not of every tab's every interaction/edge case - there's no attempt at exhaustive UI coverage.
+- **Frontend test coverage is real but not exhaustive.** 39 unit tests (`frontend/tests/`, Node's built-in test runner + jsdom, no bundler) cover the pure/testable layer - `escapeHtml`/badge helpers, `resolveStage`'s pipeline-stage ladder, `api.js`'s error-taxonomy contract, and the pipeline-bar's done/current classification. On top of that, `e2e/` (Playwright + a real Chromium browser) drives the actual served UI against a real running backend: one test walks the entire pipeline from loading a sample dataset through generating, testing, and exporting a rule report; another exercises the opt-in-auth login/logout flow; a third exercises AI-suggested detections end-to-end against a stubbed real AI provider; a fourth checks a couple of frontend error paths. That's real coverage of the golden path, the auth flow, and the AI-suggestion flow, but not of every tab's every interaction/edge case - there's no attempt at exhaustive UI coverage.
+- **AI-suggested detections are a hypothesis-generation aid, not a substitute for the deterministic catalog.** Every proposed pattern is re-verified against real data before it's shown (see [ARCHITECTURE.md](ARCHITECTURE.md#why-deterministic-first)), which rules out hallucinated fields and patterns that don't actually occur in this dataset - but it cannot verify that a pattern which *does* occur is actually malicious rather than coincidental. Treat an AI-suggested detection the same way you'd treat a colleague's hunch: worth investigating, not worth approving to production without the same scrutiny any other detection gets.
 - **Authentication is real but intentionally minimal**: one shared password (`APP_PASSWORD`), not per-analyst accounts - there's no username, no audit trail of *who* approved a detection beyond the free-text `author` field callers can set on their own, and no way to revoke a single session early (no server-side session table to delete from) short of changing `SESSION_SECRET`, which invalidates every session at once including your own, or waiting out the 12-hour TTL. This is a deliberate scope boundary for a single-analyst tool, not an oversight - see [ARCHITECTURE_AUDIT.md](ARCHITECTURE_AUDIT.md) for the full maturity assessment and roadmap.
 
 ---

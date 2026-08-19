@@ -14,8 +14,16 @@ export async function render(container) {
 
   container.innerHTML = `
     <h1>Detection Engineering Analysis</h1>
-    <p>Analyzes the normalized dataset for suspicious authentication, host, network, web, and firewall behaviors.</p>
-    <button class="primary" id="runDetectBtn">${state.detections ? 'Re-run Analysis' : 'Run Detection Analysis'}</button>
+    <p>Analyzes the normalized dataset for suspicious authentication, host, network, web, and firewall behaviors using a fixed, deterministic catalog of behaviors.</p>
+    <div class="select-row">
+      <button class="primary" id="runDetectBtn">${hasDeterministicDetections() ? 'Re-run Analysis' : 'Run Detection Analysis'}</button>
+      ${
+        state.aiEnabled
+          ? `<button id="suggestAiBtn">✨ Suggest AI Detections</button>`
+          : `<span class="muted">✨ AI-suggested detections need AI configured (Settings tab) - there's no deterministic fallback for this one, since it depends on the model looking at your actual data.</span>`
+      }
+    </div>
+    <p class="muted">AI-suggested detections look at a real sample of your normalized data for patterns the fixed catalog above wouldn't catch - but every proposed condition is re-checked against the real dataset before it's shown, and a condition that doesn't actually match anything is dropped rather than shown as a detection. They're always clearly labeled and never replace the deterministic results above.</p>
     <div id="detectionResults" class="section-gap"></div>
   `;
 
@@ -23,9 +31,9 @@ export async function render(container) {
     setStatus('Running detection engineering analysis…');
     try {
       const result = await api.detect(state.sessionId);
-      state.detections = result.detections;
+      state.detections = [...result.detections, ...(state.detections || []).filter((d) => d.source === 'ai')];
       setStatus(`Found ${result.detections.length} detection candidate(s).`);
-      renderResults(container);
+      render(container);
     } catch (err) {
       setStatus(err.message, true);
       const resultsEl = container.querySelector('#detectionResults');
@@ -33,7 +41,34 @@ export async function render(container) {
     }
   });
 
+  const suggestAiBtn = container.querySelector('#suggestAiBtn');
+  if (suggestAiBtn) {
+    suggestAiBtn.addEventListener('click', async () => {
+      setStatus('Asking AI to suggest detections from the real normalized data…');
+      suggestAiBtn.disabled = true;
+      try {
+        const result = await api.suggestAiDetections(state.sessionId);
+        state.detections = [...(state.detections || []).filter((d) => d.source !== 'ai'), ...result.detections];
+        const note =
+          result.acceptedCount > 0
+            ? `AI suggested ${result.rawSuggestedCount} pattern(s); ${result.acceptedCount} verified against your real data and kept.`
+            : `AI proposed ${result.rawSuggestedCount} pattern(s), but none held up against the real data - nothing added.`;
+        setStatus(note);
+        render(container);
+      } catch (err) {
+        setStatus(err.message, true);
+        const resultsEl = container.querySelector('#detectionResults');
+        if (resultsEl) resultsEl.innerHTML = `<div class="error-box">${escapeHtml(err.message)}</div>`;
+        suggestAiBtn.disabled = false;
+      }
+    });
+  }
+
   if (state.detections) renderResults(container);
+}
+
+function hasDeterministicDetections() {
+  return Array.isArray(state.detections) && state.detections.some((d) => d.source !== 'ai');
 }
 
 function renderResults(container) {
@@ -52,7 +87,7 @@ function renderResults(container) {
           <div class="detection-title">${escapeHtml(d.name)}</div>
           <div class="detection-meta">${escapeHtml(d.category)} &middot; ${d.mitre.techniqueId ? `${escapeHtml(d.mitre.techniqueId)} - ${escapeHtml(d.mitre.techniqueName)}` : 'MITRE mapping uncertain'}</div>
         </div>
-        <div>${severityBadge(d.severity)}</div>
+        <div>${d.source === 'ai' ? '<span class="badge ai-suggested">✨ AI-suggested</span> ' : ''}${severityBadge(d.severity)}</div>
       </div>
       <p class="muted">${escapeHtml(d.description)}</p>
       <p>Confidence: ${confidenceBar(d.confidence)}</p>

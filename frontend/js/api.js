@@ -76,6 +76,7 @@ export const api = {
   getNormalizedSample: (id) => fetch(`${BASE}/sessions/${id}/normalized/sample`).then(handle),
 
   detect: (id) => fetch(`${BASE}/sessions/${id}/detect`, { method: 'POST' }).then(handle),
+  suggestAiDetections: (id) => fetch(`${BASE}/sessions/${id}/detect/ai-suggested`, { method: 'POST' }).then(handle),
   getDetections: (id) => fetch(`${BASE}/sessions/${id}/detections`).then(handle),
   explainDetection: (id, detectionId) => fetch(`${BASE}/sessions/${id}/detections/${detectionId}/explain`).then(handle),
   explainFalsePositives: (id, ruleId) => fetch(`${BASE}/sessions/${id}/rules/${ruleId}/explain-fp`).then(handle),

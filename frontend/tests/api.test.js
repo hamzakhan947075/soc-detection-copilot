@@ -81,6 +81,13 @@ describe('api.*.handle() - error path', () => {
 });
 
 describe('api request construction', () => {
+  test('suggestAiDetections POSTs to the ai-suggested sub-route with no body', async () => {
+    mockFetch(jsonResponse(200, { detections: [], acceptedCount: 0 }));
+    await api.suggestAiDetections('s1');
+    assert.equal(calls[0].url, '/api/sessions/s1/detect/ai-suggested');
+    assert.equal(calls[0].options.method, 'POST');
+  });
+
   test('login POSTs JSON with the password in the body', async () => {
     mockFetch(jsonResponse(200, { authRequired: true, authenticated: true }));
     await api.login('s3cret');

@@ -22,6 +22,7 @@ function makeCandidate({
   evidence,
   ruleConditions,
   evaluatorResult,
+  source = 'deterministic',
 }) {
   counter += 1;
   return {
@@ -33,6 +34,11 @@ function makeCandidate({
     description,
     requiredFields,
     mitreHint,
+    // 'deterministic' (the default - every behaviors/*.js module) or 'ai' -
+    // see detection-engine/aiDetectionSuggestor.js. Lets the UI/reporting
+    // layer label AI-originated candidates distinctly; nothing about how a
+    // candidate is scored, matched, or turned into a rule differs by source.
+    source,
     recommendedThreshold: recommendedThreshold || null,
     matchedEventIndexes: matchedEventIndexes || [],
     evidence: evidence || [],

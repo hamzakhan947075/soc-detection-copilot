@@ -43,7 +43,12 @@ Elastic export / upload / paste / sample dataset
                          family of suspicious activity and emit Detection
                          Candidates (severity, confidence, evidence,
                          recommendedThreshold, and the exact ruleConditions
-                         that reproduce the match)
+                         that reproduce the match); optionally, an analyst
+                         can also ask AI to propose additional candidates
+                         from a real sample of this data (aiDetectionSuggestor.js)
+                         - every proposed candidate is deterministically
+                         re-verified against the real events before it's
+                         ever shown, see "Why deterministic-first" below
         |
         v
   mitre/                  static, reviewable hint -> {tactic, technique}
@@ -95,23 +100,68 @@ deterministically *is*: JSON/NDJSON/CSV parsing, IP/timestamp/port
 validation, ECS mapping confidence, MITRE mapping, statistics (match rate,
 false-positive rate), and rule syntax validation are all plain code with
 unit tests - none of it calls an LLM. `src/ai/aiAssist.js` is the only place
-that talks to a model, and only for optional narrative text (a short
-analyst-facing explanation of a detection, or a note on an uncertain ECS
-mapping); every one of its functions has a deterministic fallback and the
-app works identically with `ANTHROPIC_API_KEY` unset.
+that talks to a model. Most of its functions are optional narrative text (a
+short analyst-facing explanation of a detection, or a note on an uncertain
+ECS mapping) with a deterministic fallback, and the app works identically
+with no AI key configured. One function is a deliberate, narrow exception
+to that - see below.
 
-This is an architectural guarantee, not just a convention: AI output is
-narrative-only and flows in one direction. Every AI/provider call site
-(`ai/aiAssist.js`'s three explain functions, plus the `/ai/test` connection
-check) terminates in a plain `res.json(...)` response - none of them ever
-assign their result onto `session.detections[...]`, `session.mappings[...]`,
-a rule's `query`/`conditions`/`queryValid`, or into
+For everything except that one exception, this is an architectural
+guarantee, not just a convention: AI output is narrative-only and flows in
+one direction. `ai/aiAssist.js`'s three explain functions and the `/ai/test`
+connection check each terminate in a plain `res.json(...)` response - none
+of them ever assign their result onto `session.mappings[...]`, a rule's
+`query`/`conditions`/`queryValid`, or into
 `persistence/detectionStore.js`'s `upsertFromDetectionRecord`/`transition`
 (those two are only ever called with values built from deterministic session
 state or from an explicit analyst request body - never from an AI response).
-A detection's severity, confidence, MITRE mapping, ECS mapping, generated
-query, test results, and persisted lifecycle status are therefore
-structurally impossible for an AI response to alter.
+ECS mapping, generated query, test results, and persisted lifecycle status
+are structurally impossible for an AI response to alter.
+
+### The one exception: AI-suggested detections
+
+`POST /sessions/:id/detect/ai-suggested` (`ai/aiAssist.js`'s
+`suggestDetectionPatterns`, `detection-engine/aiDetectionSuggestor.js`) lets
+an analyst explicitly ask AI to propose detection candidates from a real,
+bounded sample of this session's actual normalized ECS events - by design,
+per the project owner's direction, not an accident of scope creep. This is
+the only place in the app where a model's output can end up in
+`session.detections`. It is additive, not a replacement: the deterministic
+behavior catalog (`detection-engine/behaviors/*.js`) is completely
+unaffected, runs the same as always, and the app still works with no AI key
+configured - this route just 400s with a clear `ai_not_configured` code
+instead.
+
+The guarantee that survives is narrower but still real: **the AI proposes a
+pattern's shape; it never gets to unilaterally decide a detection is real.**
+`aiDetectionSuggestor.js` treats the model's JSON response as entirely
+untrusted and runs it through two deterministic gates before anything
+reaches a session:
+
+1. **Field/shape validation.** Every `ruleConditions[].field` is checked
+   against the real set of ECS fields present in this dataset - a
+   hallucinated field name gets that condition dropped, not substituted or
+   guessed at. `category`/`severity`/`mitreHint` are checked against the
+   same known enums/lookup table (`mitre/mitreMap.js`) everything else uses;
+   an unrecognized value falls back to a safe default rather than being
+   trusted. A candidate that ends up with zero valid conditions is dropped
+   entirely.
+2. **Real re-verification.** Every surviving candidate's `ruleConditions`
+   are then evaluated against the real normalized events with
+   `testing/ruleTester.js`'s `matchesConditions()` - the exact same matcher
+   every generated rule is tested with. A candidate that doesn't actually
+   match at least one real event is dropped. The `matchedEventIndexes`,
+   MITRE mapping, and evidence shown to the analyst are the real,
+   recomputed results of that check, not the model's self-reported claim.
+
+Once a candidate survives both gates, it becomes an ordinary Detection
+Candidate (`detection-engine/candidateFactory.js`, `source: 'ai'` instead of
+the default `'deterministic'`) and flows through every downstream stage -
+rule generation, syntax validation, testing, false-positive analysis,
+tuning, lifecycle persistence - completely unchanged and exactly as
+deterministically as a behavior-catalog detection. The frontend always
+labels it with a visible "✨ AI-suggested" badge (`detection.js`); nothing
+about its origin is hidden from the analyst reviewing it.
 
 The provider layer (`ai/providers.js`, `ai/aiErrors.js`) is hardened
 independently of that guarantee: every call has a request timeout
