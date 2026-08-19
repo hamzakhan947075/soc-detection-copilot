@@ -2,6 +2,24 @@
 
 const config = require('../config/env');
 const { isValidProvider, getProviderMeta } = require('./providerDefaults');
+const { isValidIp, isIpInCidrList } = require('../detection-engine/evaluators/cidrEvaluator');
+
+// AWS, Azure, and GCP all serve their instance-metadata service (IMDS) - the
+// classic SSRF-to-cloud-credential-theft target - at the same well-known
+// link-local address by convention (169.254.169.254; AWS also serves an
+// IPv6 variant at fd00:ec2::254). A "custom AI endpoint" has no legitimate
+// reason to ever be there, so it's blocked outright - unlike loopback/
+// private ranges, which stay allowed since pointing at a self-hosted local
+// LLM (Ollama, etc.) is an explicitly intended use of the custom provider.
+const BLOCKED_AI_ENDPOINT_CIDRS = ['169.254.0.0/16', 'fd00:ec2::254/128'];
+const BLOCKED_AI_ENDPOINT_HOSTNAMES = new Set(['metadata.google.internal']); // GCP's DNS alias for the same address
+
+function isBlockedAiEndpointHost(hostname) {
+  const lower = hostname.toLowerCase();
+  if (BLOCKED_AI_ENDPOINT_HOSTNAMES.has(lower)) return true;
+  const bare = lower.startsWith('[') && lower.endsWith(']') ? lower.slice(1, -1) : lower;
+  return isValidIp(bare) && isIpInCidrList(bare, BLOCKED_AI_ENDPOINT_CIDRS);
+}
 
 /**
  * Runtime AI configuration, settable from the Settings tab (POST
@@ -91,11 +109,15 @@ function setRuntimeConfig({ provider, apiKey, model, baseUrl }) {
     if (typeof baseUrl !== 'string' || baseUrl.length > MAX_URL_LENGTH) {
       throw new AiConfigValidationError('Base URL is invalid');
     }
+    let parsed;
     try {
-      const parsed = new URL(baseUrl);
+      parsed = new URL(baseUrl);
       if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error('bad protocol');
     } catch (_err) {
       throw new AiConfigValidationError('Base URL must be a valid http(s) URL');
+    }
+    if (isBlockedAiEndpointHost(parsed.hostname)) {
+      throw new AiConfigValidationError('This base URL points at a cloud instance-metadata service and cannot be used as an AI endpoint.');
     }
     resolvedBaseUrl = baseUrl;
   }

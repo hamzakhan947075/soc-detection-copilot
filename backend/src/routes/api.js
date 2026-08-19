@@ -2,6 +2,7 @@
 
 const express = require('express');
 const config = require('../config/env');
+const { isSafeDottedPath } = require('../utils/safePath');
 const { upload } = require('../ingestion/upload');
 const { fromUpload, fromPaste } = require('../ingestion/logSource');
 const { listSampleDatasets, loadSampleDataset } = require('../ingestion/sampleDatasets');
@@ -199,13 +200,19 @@ router.put('/sessions/:sessionId/mappings', requireSession, (req, res) => {
   }
   const sanitized = mappings
     .filter((m) => m && typeof m.rawField === 'string')
-    .map((m) => ({
-      rawField: m.rawField,
-      ecsField: typeof m.ecsField === 'string' && m.ecsField.trim() ? m.ecsField.trim() : null,
-      ecsType: typeof m.ecsType === 'string' ? m.ecsType : 'keyword',
-      confidence: typeof m.confidence === 'number' ? m.confidence : null,
-      status: m.status || 'analyst-approved',
-    }));
+    .map((m) => {
+      const trimmedEcsField = typeof m.ecsField === 'string' ? m.ecsField.trim() : '';
+      // Reject a dangerous ecsField outright rather than silently dropping
+      // it deep inside normalization - see utils/safePath.js.
+      const ecsField = trimmedEcsField && isSafeDottedPath(trimmedEcsField) ? trimmedEcsField : null;
+      return {
+        rawField: m.rawField,
+        ecsField,
+        ecsType: typeof m.ecsType === 'string' ? m.ecsType : 'keyword',
+        confidence: typeof m.confidence === 'number' ? m.confidence : null,
+        status: m.status || 'analyst-approved',
+      };
+    });
   req.session.mappings = sanitized;
   req.session.stage = 'mapped';
   res.json({ mappings: sanitized });

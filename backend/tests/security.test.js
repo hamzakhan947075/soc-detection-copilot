@@ -45,6 +45,31 @@ describe('API security', () => {
     const res = await request(app).get('/health');
     expect(res.headers['x-content-type-options']).toBe('nosniff');
   });
+
+  test('rejects (rather than silently drops) a prototype-pollution attempt via ecsField, end-to-end through the real API', async () => {
+    // Regression for a real vulnerability: PUT /mappings + POST /normalize
+    // used to let an analyst-supplied ecsField of "__proto__.polluted" walk
+    // normalizeEvent's setPath onto the real, shared Object.prototype - on
+    // a deployment with no authentication, this is remotely triggerable by
+    // anyone with the URL, and pollutes every object in the process, not
+    // just this session.
+    const loadRes = await request(app)
+      .post('/api/sessions')
+      .send({ text: JSON.stringify({ weird_field: 'x' }), filename: 'pollution.ndjson' });
+    const { sessionId } = loadRes.body;
+
+    const mapRes = await request(app)
+      .put(`/api/sessions/${sessionId}/mappings`)
+      .send({ mappings: [{ rawField: 'weird_field', ecsField: '__proto__.polluted', ecsType: 'keyword' }] });
+    expect(mapRes.status).toBe(200);
+    expect(mapRes.body.mappings[0].ecsField).toBeNull(); // rejected outright, not silently accepted
+
+    await request(app).post(`/api/sessions/${sessionId}/normalize`);
+
+    expect(Object.prototype.polluted).toBeUndefined();
+    expect(({}).polluted).toBeUndefined();
+    delete Object.prototype.polluted; // safety net in case this assertion is what caught a regression
+  });
 });
 
 describe('Sample dataset path traversal protection', () => {

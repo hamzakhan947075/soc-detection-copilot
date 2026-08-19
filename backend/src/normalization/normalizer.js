@@ -2,6 +2,7 @@
 
 const { flattenEvent } = require('../field-discovery/flatten');
 const { isIp, isTimestamp } = require('../field-discovery/valueTypes');
+const { isSafeDottedPath } = require('../utils/safePath');
 
 /**
  * Builds a normalized ECS event from a raw (flattened) event plus a set of
@@ -64,7 +65,12 @@ function toIsoString(value) {
   return String(value);
 }
 
+// ecsField comes from analyst-editable mapping data (PUT /sessions/:id/mappings)
+// and is never restricted to a known-safe field list - see utils/safePath.js
+// for why a dangerous path segment must be rejected here, not just at the
+// API boundary (defense in depth).
 function setPath(obj, dottedPath, value) {
+  if (!isSafeDottedPath(dottedPath)) return;
   const parts = dottedPath.split('.');
   let cursor = obj;
   for (let i = 0; i < parts.length - 1; i++) {

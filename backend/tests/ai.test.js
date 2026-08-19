@@ -147,6 +147,24 @@ describe('aiConfigStore', () => {
     );
   });
 
+  test('rejects a custom base URL pointing at a cloud instance-metadata service (SSRF)', () => {
+    expect(() =>
+      aiConfigStore.setRuntimeConfig({ provider: 'custom', apiKey: 'x', model: 'llama3', baseUrl: 'http://169.254.169.254/latest/meta-data/' })
+    ).toThrow(aiConfigStore.AiConfigValidationError);
+    expect(() => aiConfigStore.setRuntimeConfig({ provider: 'custom', apiKey: 'x', model: 'llama3', baseUrl: 'http://metadata.google.internal/' })).toThrow(
+      aiConfigStore.AiConfigValidationError
+    );
+    expect(() => aiConfigStore.setRuntimeConfig({ provider: 'custom', apiKey: 'x', model: 'llama3', baseUrl: 'http://[fd00:ec2::254]/' })).toThrow(
+      aiConfigStore.AiConfigValidationError
+    );
+  });
+
+  test('still allows loopback and private-network base URLs (self-hosted local LLMs are a legitimate use case)', () => {
+    expect(() => aiConfigStore.setRuntimeConfig({ provider: 'custom', apiKey: 'x', model: 'llama3', baseUrl: 'http://127.0.0.1:11434/v1' })).not.toThrow();
+    aiConfigStore.clearRuntimeConfig();
+    expect(() => aiConfigStore.setRuntimeConfig({ provider: 'custom', apiKey: 'x', model: 'llama3', baseUrl: 'http://192.168.1.50:11434/v1' })).not.toThrow();
+  });
+
   test('accepts a valid Groq configuration and masks the key in status', () => {
     const status = aiConfigStore.setRuntimeConfig({ provider: 'groq', apiKey: 'gsk-abcdefghijklmnop' });
     expect(status.enabled).toBe(true);

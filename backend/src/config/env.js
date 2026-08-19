@@ -33,6 +33,7 @@ const config = {
     password: process.env.ELASTICSEARCH_PASSWORD || '',
     apiKey: process.env.ELASTICSEARCH_API_KEY || '',
     index: process.env.ELASTICSEARCH_INDEX || '',
+    requestTimeoutMs: toInt(process.env.ELASTICSEARCH_TIMEOUT_MS, 15000),
   },
 
   // Comma-separated CIDR list (e.g. "10.0.0.0/8,192.168.1.0/24") that

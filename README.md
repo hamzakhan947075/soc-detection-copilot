@@ -6,7 +6,7 @@
 Take raw logs exported from Elastic — or uploaded/pasted from anywhere — and run them through a real, end-to-end detection engineering workflow: field discovery, ECS mapping, behavioral detection, MITRE ATT&CK mapping, rule generation, testing, false-positive analysis, and tuning.
 
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen)
-![Tests](https://img.shields.io/badge/tests-277%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-293%20passing-brightgreen)
 ![No build step](https://img.shields.io/badge/frontend-vanilla%20JS%2C%20no%20build%20step-blue)
 ![Deterministic core](https://img.shields.io/badge/core%20logic-deterministic-informational)
 ![Status](https://img.shields.io/badge/status-active-success)
@@ -83,7 +83,7 @@ flowchart LR
 - 📊 **SOC-style dashboard** — logs processed, mapping coverage, detections, rules validated, MITRE technique count, high-risk findings
 - 🌓 **Dark SOC/SIEM-themed UI** — 13 tabs, no build step, no framework
 - ✨ **Multi-provider AI assist, hardened** — Claude, Groq, OpenAI, or any other OpenAI-compatible API; configure via environment variables or paste a key straight into the **Settings** tab (session-memory only, never written to disk, always masked when shown back). Every call has a request timeout and a bounded retry policy with backoff for transient failures (network error, 429 rate limit, 5xx) - auth errors are never retried, and every failure carries a stable error code (`timeout`/`network`/`rate_limited`/`auth`/`server_error`), not just a message. Powers optional "Explain with AI" buttons on detections, ECS mappings, and false-positive analysis — every one of them has a deterministic fallback when no key is set or a call fails, and AI output is narrative-only: it can never alter a detection's severity/confidence/MITRE mapping, an ECS mapping, a rule's conditions/query, a test result, or a persisted lifecycle status
-- 🔒 **Security-first**: upload allowlisting/size limits, bounded JSON parsing, catastrophic-backtracking-safe regexes, escaped/validated (never executed) query generation, rate limiting, and env-var-only secrets
+- 🔒 **Security-first**: upload allowlisting/size limits, bounded JSON parsing, catastrophic-backtracking-safe regexes, escaped/validated (never executed) query generation, rate limiting, env-var-only secrets, prototype-pollution guards on every analyst-editable field path, SSRF blocking on the custom AI endpoint, and a hard timeout on every outbound network call (AI provider, Elasticsearch)
 
 ## Quick start
 
@@ -116,7 +116,7 @@ Any other Node host works the same way (Railway, Fly.io, a plain VPS with `pm2`/
 
 ```bash
 cd backend
-npm test              # 277 tests across parsing, field discovery, ECS
+npm test              # 293 tests across parsing, field discovery, ECS
                        # mapping, detection engine, MITRE mapping, rule
                        # generation/validation, rule testing, false-positive
                        # analysis, tuning, AI provider config, and API/upload security
@@ -153,7 +153,7 @@ backend/
     pipeline/          session store + orchestration + pipeline stage metadata
     routes/            Express API
   sample-data/         8 bundled sample datasets
-  tests/               277 tests (see above)
+  tests/               293 tests (see above)
 frontend/
   js/
     api.js, state.js, controller.js, pipelineBar.js, utils.js
@@ -179,7 +179,7 @@ All optional — copy `backend/.env.example` to `backend/.env`. Nothing here is 
 | `RATE_LIMIT_WINDOW_MS`, `RATE_LIMIT_MAX` | API rate limiting |
 | `INTERNAL_CIDR_RANGES` | Comma-separated CIDR list overriding the default RFC1918/loopback/link-local ranges the CIDR evaluator treats as "internal" |
 | `DETECTION_DB_PATH` | Path to the SQLite file backing the detection lifecycle (default `backend/data/detections.sqlite`; tests always use `:memory:`) |
-| `ELASTICSEARCH_URL`, `ELASTICSEARCH_USERNAME`, `ELASTICSEARCH_PASSWORD`, `ELASTICSEARCH_API_KEY`, `ELASTICSEARCH_INDEX` | Optional direct Elasticsearch fetch (Settings tab shows connection status) |
+| `ELASTICSEARCH_URL`, `ELASTICSEARCH_USERNAME`, `ELASTICSEARCH_PASSWORD`, `ELASTICSEARCH_API_KEY`, `ELASTICSEARCH_INDEX`, `ELASTICSEARCH_TIMEOUT_MS` (default `15000`) | Optional direct Elasticsearch fetch (Settings tab shows connection status); the timeout prevents a hung/unreachable cluster from hanging the server |
 | `AI_PROVIDER` (`anthropic`\|`groq`\|`openai`\|`custom`), plus per-provider `ANTHROPIC_API_KEY`/`ANTHROPIC_MODEL`, `GROQ_API_KEY`/`GROQ_MODEL`, `OPENAI_API_KEY`/`OPENAI_MODEL`, or `AI_API_KEY`+`AI_BASE_URL`+`AI_MODEL` for a custom OpenAI-compatible endpoint | Optional AI-assist narrative text. Instead of env vars, a key can also be pasted into the **Settings** tab at runtime — that takes priority for the life of the running process and is never written to disk (see [Environment variables](#environment-variables) note below) |
 | `AI_REQUEST_TIMEOUT_MS` (default `20000`), `AI_MAX_RETRIES` (default `2`) | How long to wait for an AI provider response, and how many times to retry a transient failure with backoff before falling back to the deterministic narrative |
 
@@ -215,6 +215,10 @@ The frontend talks to a REST API under `/api` — see `backend/src/routes/api.js
 - Generated queries are built from an escaped, structured condition list and syntax-validated — never executed against a live system by this tool.
 - Helmet security headers, per-IP rate limiting, generic (non-leaking) error responses.
 - Elasticsearch credentials come only from environment variables, never hardcoded, never logged. AI provider keys come from environment variables or the Settings tab (session memory only, never written to disk) - never hardcoded, never logged, always masked when displayed back.
+- **Prototype-pollution hardening (CWE-1321)**: analyst-editable ECS field mappings (`PUT /sessions/:id/mappings`) are rejected outright if they contain a `__proto__`/`constructor`/`prototype` path segment, with the same guard defensively applied everywhere a dotted field path is written (`utils/safePath.js`) - not just at the API boundary.
+- **SSRF hardening**: a custom AI provider's base URL is rejected if it resolves to a cloud instance-metadata address (`169.254.169.254`, `fd00:ec2::254`, `metadata.google.internal`) - loopback and private-network addresses stay allowed, since pointing at a self-hosted local LLM is an intended use of the custom provider.
+- Every outbound network call this app makes (AI provider, Elasticsearch) has a request timeout - none can hang the server indefinitely on an unreachable host. AI calls additionally retry transient failures (network error, 429, 5xx) with backoff; auth errors are never retried.
+- No `child_process`/shell execution anywhere in the codebase - there is no command-injection surface to defend.
 
 ## Known limitations (stated honestly, not hidden)
 
@@ -223,7 +227,7 @@ The frontend talks to a REST API under `/api` — see `backend/src/routes/api.js
 - PDF report export is intentionally not implemented (JSON/Markdown/CSV are); a correct PDF renderer is a substantial dependency on its own.
 - Log source identification and ECS mapping are confidence-scored heuristics, not guaranteed-correct — the UI always shows confidence and reasoning, and never presents an uncertain mapping or MITRE technique as definitive.
 - **Detection lifecycle persistence is real but narrow, not general persistence.** A detection's approval/production status and version history now survive a restart via SQLite (`persistence/`) - but everything else (parsed events, mappings, normalized events, in-session detections/rules/test results) is still in-memory only, and on Render's free tier the SQLite file itself doesn't survive a deploy/spin-down unless it's on a mounted persistent disk.
-- **The positive/negative/edge test-case framework validates a rule's own logic in isolation, not real-world coverage.** Auto-generated cases prove the rule matches what it says it matches and doesn't match an obviously different value - they cannot tell you whether the rule covers every real attacker variation, only whether its stated conditions behave as claimed. Frontend test coverage is still zero (all 277 tests are backend-only).
+- **The positive/negative/edge test-case framework validates a rule's own logic in isolation, not real-world coverage.** Auto-generated cases prove the rule matches what it says it matches and doesn't match an obviously different value - they cannot tell you whether the rule covers every real attacker variation, only whether its stated conditions behave as claimed. Frontend test coverage is still zero (all 293 tests are backend-only).
 - There is still no authentication — see [ARCHITECTURE_AUDIT.md](ARCHITECTURE_AUDIT.md) for the full maturity assessment and roadmap.
 
 ---

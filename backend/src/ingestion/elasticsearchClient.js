@@ -41,13 +41,32 @@ function assertConfigured() {
  * `cause` (hostnames, ports, stack-adjacent text) depending on the Node/
  * undici version - never propagate it to the client. Same pattern as
  * ai/providers.js's callProvider, for the same reason.
+ *
+ * Also enforces a hard request timeout (ELASTICSEARCH_TIMEOUT_MS, default
+ * 15s) via AbortController - a hung/unreachable ES host would otherwise
+ * hang the request indefinitely.
  */
 async function safeFetch(url, options) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), config.elasticsearch.requestTimeoutMs);
   try {
-    return await fetch(url, options);
-  } catch (_err) {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } catch (err) {
+    if (err.name === 'AbortError') {
+      throw new Error(`Elasticsearch request timed out after ${config.elasticsearch.requestTimeoutMs}ms.`);
+    }
     throw new Error('Could not reach the Elasticsearch cluster (network error). Check ELASTICSEARCH_URL and network connectivity.');
+  } finally {
+    clearTimeout(timer);
   }
+}
+
+/** Clamps a requested page size to a safe positive integer, never trusting caller input directly. */
+function safePageSize(requestedSize) {
+  const n = Number(requestedSize);
+  const fallback = 1000;
+  if (!Number.isFinite(n) || n <= 0) return Math.min(fallback, config.upload.maxEventsPerDataset);
+  return Math.min(Math.floor(n), config.upload.maxEventsPerDataset);
 }
 
 async function testConnection() {
@@ -86,7 +105,7 @@ async function fetchLogs({ index, from, to, size = 1000 } = {}) {
 
   const auth = buildAuthHeader();
   const body = {
-    size: Math.min(size, config.upload.maxEventsPerDataset),
+    size: safePageSize(size),
     query: from || to ? { range: { '@timestamp': { gte: from, lte: to } } } : { match_all: {} },
     sort: [{ '@timestamp': 'desc' }],
   };

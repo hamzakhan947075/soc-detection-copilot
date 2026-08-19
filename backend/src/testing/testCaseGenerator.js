@@ -1,6 +1,7 @@
 'use strict';
 
 const { valuesOf, cidrRangesOf } = require('../rule-generation/queryLanguages');
+const { isSafeDottedPath } = require('../utils/safePath');
 
 /**
  * Generates a default set of positive/negative/edge test cases directly
@@ -16,7 +17,12 @@ const { valuesOf, cidrRangesOf } = require('../rule-generation/queryLanguages');
 const OUTSIDE_TEST_IP = '203.0.113.10'; // TEST-NET-3 (RFC 5737) - never RFC1918/loopback/link-local
 const NEGATIVE_MARKER = '__negative_test_value__';
 
+// Condition field names come from the detection engine today, but this
+// walks/writes a plain object by dotted path the same way
+// normalization/normalizer.js's setPath does - see utils/safePath.js for why
+// the same guard applies here too.
 function setPath(obj, dottedField, value) {
+  if (!isSafeDottedPath(dottedField)) return;
   const parts = String(dottedField).split('.');
   let node = obj;
   for (let i = 0; i < parts.length - 1; i++) {
@@ -27,6 +33,7 @@ function setPath(obj, dottedField, value) {
 }
 
 function deletePath(obj, dottedField) {
+  if (!isSafeDottedPath(dottedField)) return;
   const parts = String(dottedField).split('.');
   let node = obj;
   for (let i = 0; i < parts.length - 1; i++) {
