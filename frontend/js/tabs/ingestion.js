@@ -125,16 +125,28 @@ function wireEvents(container) {
 }
 
 async function handleFile(file) {
+  const resultEl = document.getElementById('ingestResult');
+  if (!file.size) {
+    showIngestError(resultEl, `"${file.name}" is empty (0 bytes) - nothing to ingest.`);
+    return;
+  }
   const ext = '.' + file.name.split('.').pop().toLowerCase();
   if (!ALLOWED_EXT.includes(ext)) {
-    setStatus(`File type "${ext}" is not allowed.`, true);
+    showIngestError(resultEl, `File type "${ext}" is not allowed. Allowed: ${ALLOWED_EXT.join(', ')}`);
     return;
   }
   await ingest(() => api.uploadFile(file));
 }
 
+function showIngestError(resultEl, message) {
+  setStatus(message, true);
+  if (resultEl) resultEl.innerHTML = `<div class="error-box section-gap">${escapeHtml(message)}</div>`;
+}
+
 async function ingest(fn) {
+  const resultEl = document.getElementById('ingestResult');
   setStatus('Ingesting…');
+  if (resultEl) resultEl.innerHTML = `<p class="muted section-gap">Ingesting…</p>`;
   try {
     const result = await fn();
     state.sessionId = result.sessionId;
@@ -149,9 +161,11 @@ async function ingest(fn) {
     state.lastTuning = null;
 
     setSessionLabel(`Session ${result.sessionId.slice(0, 8)} - ${result.totalParsed} events (${result.format})`);
-    setStatus(`Ingested ${result.totalParsed} events. Detected source: ${result.logSource.source} (${result.logSource.confidence}%).`);
+    const message = `Ingested ${result.totalParsed} events. Detected source: ${result.logSource.source} (${result.logSource.confidence}%).`;
+    setStatus(message);
+    if (resultEl) resultEl.innerHTML = `<div class="ok-box section-gap">${escapeHtml(message)}</div>`;
     controller.goTo('fields');
   } catch (err) {
-    setStatus(err.message, true);
+    showIngestError(resultEl, err.message);
   }
 }
