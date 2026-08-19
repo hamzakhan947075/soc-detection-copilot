@@ -57,7 +57,7 @@ export async function render(container) {
       <p class="muted section-gap">Keys entered here are held in this server process's memory only for the
       current session - never written to a file, never logged, and cleared on restart. To persist a key across
       restarts, set it as an environment variable instead (see <code>backend/.env.example</code>): <code>ANTHROPIC_API_KEY</code>,
-      <code>GROQ_API_KEY</code>, <code>OPENAI_API_KEY</code>, <code>GEMINI_API_KEY</code>, or <code>AI_API_KEY</code> + <code>AI_BASE_URL</code> for a
+      <code>GROQ_API_KEY</code>, <code>OPENAI_API_KEY</code>, <code>GEMINI_API_KEY</code>, <code>OPENROUTER_API_KEY</code>, or <code>AI_API_KEY</code> + <code>AI_BASE_URL</code> for a
       custom OpenAI-compatible endpoint.</p>
       <div id="aiTestResult"></div>
     </div>

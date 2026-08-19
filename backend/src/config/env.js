@@ -86,10 +86,11 @@ function resolveAiEnvConfig() {
     groq: { apiKey: process.env.GROQ_API_KEY || '', model: process.env.GROQ_MODEL || 'openai/gpt-oss-120b', baseUrl: '' },
     openai: { apiKey: process.env.OPENAI_API_KEY || '', model: process.env.OPENAI_MODEL || 'gpt-4o-mini', baseUrl: '' },
     gemini: { apiKey: process.env.GEMINI_API_KEY || '', model: process.env.GEMINI_MODEL || 'gemini-3.6-flash', baseUrl: '' },
+    openrouter: { apiKey: process.env.OPENROUTER_API_KEY || '', model: process.env.OPENROUTER_MODEL || '', baseUrl: '' },
     custom: { apiKey: process.env.AI_API_KEY || '', model: process.env.AI_MODEL || '', baseUrl: process.env.AI_BASE_URL || '' },
   };
 
-  const order = explicit && candidates[explicit] ? [explicit] : ['anthropic', 'groq', 'openai', 'gemini', 'custom'];
+  const order = explicit && candidates[explicit] ? [explicit] : ['anthropic', 'groq', 'openai', 'gemini', 'openrouter', 'custom'];
   const chosenProvider = order.find((p) => candidates[p].apiKey) || explicit || 'anthropic';
   const chosen = candidates[chosenProvider] || candidates.anthropic;
 

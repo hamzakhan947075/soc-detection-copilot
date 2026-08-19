@@ -35,6 +35,17 @@ const PROVIDERS = {
     defaultModel: 'gemini-3.6-flash',
     requiresBaseUrl: false,
   },
+  openrouter: {
+    label: 'OpenRouter',
+    api: 'openai-chat',
+    baseUrl: 'https://openrouter.ai/api/v1',
+    // No hardcoded default: OpenRouter's free (":free"-suffixed) model
+    // lineup turns over quickly - see openrouter.ai/models?max_price=0 for
+    // whatever is currently free, and type that exact id into the Model
+    // field. Same lesson as gemini-2.0-flash getting retired underneath us.
+    defaultModel: '',
+    requiresBaseUrl: false,
+  },
   custom: {
     label: 'Custom (OpenAI-compatible)',
     api: 'openai-chat',
