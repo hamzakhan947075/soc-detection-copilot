@@ -9,8 +9,12 @@ function buildDashboard(session) {
   const detections = session.detections || [];
   const rules = [...session.rules.values()];
 
-  const mappedFields = mappings.filter((m) => m.ecsField).length;
-  const mappingCoverage = mappings.length > 0 ? Math.round((mappedFields / mappings.length) * 10000) / 100 : 0;
+  // Elasticsearch metadata fields (_id, _index, ...) are never mappable to
+  // ECS, so they're excluded from the coverage denominator rather than
+  // counted as a mapping gap.
+  const mappableFields = mappings.filter((m) => m.status !== 'excluded');
+  const mappedFields = mappableFields.filter((m) => m.ecsField).length;
+  const mappingCoverage = mappableFields.length > 0 ? Math.round((mappedFields / mappableFields.length) * 10000) / 100 : 0;
 
   const validatedRules = rules.filter((r) => r.queryValid).length;
   const totalPotentialFPs = rules.reduce((sum, r) => sum + (r.lastFpAnalysis ? r.lastFpAnalysis.potentialFalsePositiveCount : 0), 0);

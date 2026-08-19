@@ -43,7 +43,7 @@ export async function render(container) {
                   <td>${escapeHtml(f.nullPercentage)}%</td>
                   <td>${escapeHtml(f.securityRelevance)}</td>
                   <td class="mono">${f.ecsCandidate ? escapeHtml(f.ecsCandidate) : '<span class="muted">none</span>'}</td>
-                  <td>${f.ecsCandidate ? confidenceBar(f.ecsConfidence) : statusBadge('unmapped')}</td>
+                  <td>${f.ecsCandidate ? confidenceBar(f.ecsConfidence) : statusBadge(f.ecsStatus)}</td>
                 </tr>`
               )
               .join('')}

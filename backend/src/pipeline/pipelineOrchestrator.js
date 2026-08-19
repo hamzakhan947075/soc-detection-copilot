@@ -49,8 +49,12 @@ function normalizeAll(events, mappings) {
     if (idx < 10) sampleChanges.push({ index: idx, raw: rawEvent, normalized, changes, unmapped });
   });
 
-  const mappedFieldCount = mappings.filter((m) => m.ecsField).length;
-  const totalFieldCount = mappings.length || 1;
+  // Elasticsearch metadata fields (_id, _index, ...) are never mappable to
+  // ECS and aren't part of the original log content, so they're excluded
+  // from the coverage denominator rather than counted as a mapping gap.
+  const mappableFields = mappings.filter((m) => m.status !== 'excluded');
+  const mappedFieldCount = mappableFields.filter((m) => m.ecsField).length;
+  const totalFieldCount = mappableFields.length || 1;
   const coveragePercent = Math.round((mappedFieldCount / totalFieldCount) * 10000) / 100;
 
   return { normalizedEvents, sampleChanges, coveragePercent, totalChanges };

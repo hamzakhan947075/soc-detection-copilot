@@ -188,6 +188,7 @@ pre { background: var(--bg-0); border: 1px solid var(--border); border-radius: 8
 .badge.confident { background: rgba(109,211,163,0.15); color: var(--low); }
 .badge.uncertain { background: rgba(255,209,102,0.15); color: var(--medium); }
 .badge.unmapped { background: rgba(159,176,195,0.15); color: var(--text-1); }
+.badge.excluded { background: var(--bg-3); color: var(--text-2); font-style: italic; }
 .badge.neutral { background: var(--bg-3); color: var(--text-1); }
 
 .confidence-bar { width: 60px; height: 5px; background: var(--bg-3); border-radius: 3px; overflow: hidden; display: inline-block; vertical-align: middle; margin-right: 6px; }

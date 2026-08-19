@@ -1,6 +1,6 @@
 'use strict';
 
-const { isKnownEcsField, getEcsFieldInfo } = require('./ecsSchema');
+const { isKnownEcsField, getEcsFieldInfo, isElasticsearchMetadataField, resolveTextMultifield } = require('./ecsSchema');
 const { ALIASES, normalizeFieldName } = require('./aliasDictionary');
 const { inferValueType } = require('../field-discovery/valueTypes');
 
@@ -14,6 +14,22 @@ const UNCERTAIN_THRESHOLD = 0.75;
  * the UI can show "uncertain - analyst review required" where appropriate.
  */
 function suggestMapping(rawFieldName, sampleValues = []) {
+  // Case 0: Elasticsearch's own hit metadata (_id, _index, _score, ...) -
+  // never part of ECS and never log content, so this is correctly excluded
+  // rather than reported as an unmapped gap.
+  if (isElasticsearchMetadataField(rawFieldName)) {
+    return {
+      rawField: rawFieldName,
+      ecsField: null,
+      ecsType: null,
+      confidence: null,
+      reason: 'Elasticsearch hit metadata (index bookkeeping), not part of the ECS schema or the original log content.',
+      transformationRequired: null,
+      alternates: [],
+      status: 'excluded',
+    };
+  }
+
   // Case 1: the raw field is already a recognized, well-formed ECS path.
   if (isKnownEcsField(rawFieldName)) {
     const info = getEcsFieldInfo(rawFieldName);
@@ -23,6 +39,23 @@ function suggestMapping(rawFieldName, sampleValues = []) {
       ecsType: info.type,
       confidence: 0.99,
       reason: `Field name already matches the ECS schema (${info.description})`,
+      transformationRequired: false,
+      alternates: [],
+      status: 'confident',
+    };
+  }
+
+  // Case 2: a Kibana/ECS `.text` multi-field alongside an already-known ECS
+  // field (e.g. host.name.text next to host.name) - resolved, not unmapped.
+  const textBase = resolveTextMultifield(rawFieldName);
+  if (textBase) {
+    const info = getEcsFieldInfo(textBase);
+    return {
+      rawField: rawFieldName,
+      ecsField: textBase,
+      ecsType: 'match_only_text',
+      confidence: 0.95,
+      reason: `Full-text search multi-field of the ECS field "${textBase}" (${info.description})`,
       transformationRequired: false,
       alternates: [],
       status: 'confident',
