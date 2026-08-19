@@ -1,6 +1,8 @@
 'use strict';
 
 const { getProviderMeta } = require('./providerDefaults');
+const config = require('../config/env');
+const { AiTimeoutError, AiNetworkError, AiRateLimitError, AiAuthError, AiServerError } = require('./aiErrors');
 
 class AiConfigError extends Error {
   constructor(message) {
@@ -98,27 +100,86 @@ function parseResponseText(provider, json) {
   return json.choices?.[0]?.message?.content || '';
 }
 
-/**
- * Performs the actual network call. Never logs or echoes the API key -
- * fetch errors are converted to plain status-code messages before being
- * thrown, so nothing from request headers can leak into an error string.
- */
-async function callProvider(settings, prompt, { maxTokens = 400 } = {}) {
-  const { url, headers, body } = buildRequest(settings, prompt, maxTokens);
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
-  let res;
+/** Exponential backoff in seconds: 0.5s, 1s, 2s, 4s (capped). */
+function backoffSeconds(attempt) {
+  return Math.min(4, 0.5 * 2 ** attempt);
+}
+
+function parseRetryAfterSeconds(headerValue) {
+  if (!headerValue) return null;
+  const n = Number(headerValue);
+  return Number.isFinite(n) && n >= 0 ? n : null;
+}
+
+/** fetch() with a hard timeout, translating an abort into AiTimeoutError and any other network failure into AiNetworkError. */
+async function fetchWithTimeout(url, options, timeoutMs) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body) });
-  } catch (_err) {
-    throw new Error('Could not reach the AI provider (network error).');
+    return await fetch(url, { ...options, signal: controller.signal });
+  } catch (err) {
+    if (err.name === 'AbortError') throw new AiTimeoutError(timeoutMs);
+    throw new AiNetworkError();
+  } finally {
+    clearTimeout(timer);
   }
+}
 
-  if (!res.ok) {
-    throw new Error(`AI provider request failed with status ${res.status}${await extractErrorDetail(res)}`);
+/**
+ * Performs the actual network call, with a request timeout and a bounded
+ * retry policy for transient failures (network error, request timeout,
+ * 429 rate limit, 5xx server error) using exponential backoff (or the
+ * provider's own Retry-After header, when present, for 429s). Auth errors
+ * (401/403) and other 4xx client errors are never retried - retrying a
+ * bad API key or a malformed request cannot succeed. Never logs or echoes
+ * the API key; error messages only ever include the provider's own
+ * response text (see extractErrorDetail).
+ */
+async function callProvider(settings, prompt, { maxTokens = 400, timeoutMs, maxRetries } = {}) {
+  const { url, headers, body } = buildRequest(settings, prompt, maxTokens);
+  const effectiveTimeoutMs = timeoutMs ?? config.ai.requestTimeoutMs;
+  const effectiveMaxRetries = maxRetries ?? config.ai.maxRetries;
+
+  for (let attempt = 0; ; attempt++) {
+    const isLastAttempt = attempt >= effectiveMaxRetries;
+    try {
+      const res = await fetchWithTimeout(url, { method: 'POST', headers, body: JSON.stringify(body) }, effectiveTimeoutMs);
+
+      if (res.ok) {
+        const json = await res.json();
+        return parseResponseText(settings.provider, json);
+      }
+
+      const detail = await extractErrorDetail(res);
+      if (res.status === 401 || res.status === 403) {
+        throw new AiAuthError(res.status, detail); // never retryable
+      }
+      if (res.status === 429) {
+        const retryAfterSeconds = parseRetryAfterSeconds(res.headers.get('retry-after'));
+        if (!isLastAttempt) {
+          await sleep((retryAfterSeconds ?? backoffSeconds(attempt)) * 1000);
+          continue;
+        }
+        throw new AiRateLimitError(retryAfterSeconds, detail);
+      }
+      const serverError = new AiServerError(res.status, detail);
+      if (serverError.retryable && !isLastAttempt) {
+        await sleep(backoffSeconds(attempt) * 1000);
+        continue;
+      }
+      throw serverError;
+    } catch (err) {
+      if (err.retryable && !isLastAttempt) {
+        await sleep(backoffSeconds(attempt) * 1000);
+        continue;
+      }
+      throw err;
+    }
   }
-
-  const json = await res.json();
-  return parseResponseText(settings.provider, json);
 }
 
 module.exports = { buildRequest, parseResponseText, callProvider, AiConfigError };

@@ -44,7 +44,16 @@ const config = {
     .map((s) => s.trim())
     .filter(Boolean),
 
-  ai: resolveAiEnvConfig(),
+  ai: {
+    ...resolveAiEnvConfig(),
+    // Provider hardening (see ai/providers.js): how long to wait for a
+    // response before giving up, and how many times to retry a transient
+    // failure (network error, 429, 5xx) with backoff. Never retries an
+    // auth error (401/403) or a bad-request error (4xx other than 429) -
+    // those aren't going to succeed on retry.
+    requestTimeoutMs: toInt(process.env.AI_REQUEST_TIMEOUT_MS, 20000),
+    maxRetries: toInt(process.env.AI_MAX_RETRIES, 2),
+  },
 };
 
 /**

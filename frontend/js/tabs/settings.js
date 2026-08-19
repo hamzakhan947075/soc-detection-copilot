@@ -140,11 +140,10 @@ function wireEvents(container, providers) {
     resultEl.innerHTML = '<p class="muted">Testing…</p>';
     try {
       const result = await api.testAiConfig();
-      resultEl.innerHTML = result.success
-        ? `<div class="ok-box">Provider responded successfully: "${escapeHtml(result.reply)}"</div>`
-        : `<div class="error-box">${escapeHtml(result.error)}</div>`;
+      resultEl.innerHTML = result.success ? `<div class="ok-box">Provider responded successfully: "${escapeHtml(result.reply)}"</div>` : '';
     } catch (err) {
-      resultEl.innerHTML = `<div class="error-box">${escapeHtml(err.message)}</div>`;
+      const codeNote = err.code ? ` <span class="muted">(${escapeHtml(err.code)}${err.retryable ? ', transient - may succeed if you try again' : ''})</span>` : '';
+      resultEl.innerHTML = `<div class="error-box">${escapeHtml(err.message)}${codeNote}</div>`;
     }
   });
 

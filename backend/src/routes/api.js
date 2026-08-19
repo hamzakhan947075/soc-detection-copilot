@@ -100,7 +100,10 @@ router.post(
       }
       res.json({ success: true, reply: text.trim().slice(0, 100) });
     } catch (err) {
-      res.status(400).json({ success: false, error: err.message });
+      // Structured errors (see ai/aiErrors.js) carry a stable `code` so the
+      // Settings UI can distinguish "bad key" from "provider is down" from
+      // "rate limited" instead of only having a human-readable message.
+      res.status(400).json({ success: false, error: err.message, code: err.code || null, retryable: Boolean(err.retryable) });
     }
   })
 );

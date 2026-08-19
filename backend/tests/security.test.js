@@ -238,6 +238,25 @@ describe('AI config API', () => {
     const cleared = await request(app).delete('/api/ai/config');
     expect(cleared.body.source).not.toBe('session');
   });
+
+  test('/ai/test surfaces a structured error code (not just a message) when the provider rejects the key', async () => {
+    const http = require('http');
+    const server = http.createServer((_req, res) => {
+      res.writeHead(401, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: { message: 'invalid api key' } }));
+    });
+    await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const { port } = server.address();
+
+    await request(app).post('/api/ai/config').send({ provider: 'custom', apiKey: 'k', baseUrl: `http://127.0.0.1:${port}`, model: 'test-model' });
+    const res = await request(app).post('/api/ai/test');
+    server.close();
+
+    expect(res.status).toBe(400);
+    expect(res.body.success).toBe(false);
+    expect(res.body.code).toBe('auth');
+    expect(res.body.retryable).toBe(false);
+  });
 });
 
 describe('AI field-mapping check', () => {

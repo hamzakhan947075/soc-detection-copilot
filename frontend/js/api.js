@@ -9,7 +9,17 @@ async function handle(res) {
   }
   if (!res.ok) {
     const message = (body && body.error) || `Request failed with status ${res.status}`;
-    throw new Error(message);
+    const err = new Error(message);
+    // Structured AI-provider errors (see backend ai/aiErrors.js) carry a
+    // stable `code`/`retryable` alongside the message - attach whatever
+    // extra fields the response body has so any caller can branch on them,
+    // not just display the message.
+    if (body && typeof body === 'object') {
+      for (const [key, value] of Object.entries(body)) {
+        if (key !== 'error') err[key] = value;
+      }
+    }
+    throw err;
   }
   return body;
 }

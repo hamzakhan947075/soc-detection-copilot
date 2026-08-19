@@ -100,6 +100,30 @@ analyst-facing explanation of a detection, or a note on an uncertain ECS
 mapping); every one of its functions has a deterministic fallback and the
 app works identically with `ANTHROPIC_API_KEY` unset.
 
+This is an architectural guarantee, not just a convention: AI output is
+narrative-only and flows in one direction. Every AI/provider call site
+(`ai/aiAssist.js`'s three explain functions, plus the `/ai/test` connection
+check) terminates in a plain `res.json(...)` response - none of them ever
+assign their result onto `session.detections[...]`, `session.mappings[...]`,
+a rule's `query`/`conditions`/`queryValid`, or into
+`persistence/detectionStore.js`'s `upsertFromDetectionRecord`/`transition`
+(those two are only ever called with values built from deterministic session
+state or from an explicit analyst request body - never from an AI response).
+A detection's severity, confidence, MITRE mapping, ECS mapping, generated
+query, test results, and persisted lifecycle status are therefore
+structurally impossible for an AI response to alter.
+
+The provider layer (`ai/providers.js`, `ai/aiErrors.js`) is hardened
+independently of that guarantee: every call has a request timeout
+(`AI_REQUEST_TIMEOUT_MS`) and a bounded retry policy with backoff
+(`AI_MAX_RETRIES`) for transient failures (network error, timeout, 429,
+5xx), honoring a provider's `Retry-After` header when present. Auth errors
+(401/403) and other 4xx errors are never retried. Every failure is a typed
+error (`AiTimeoutError`/`AiNetworkError`/`AiRateLimitError`/`AiAuthError`/
+`AiServerError`) with a stable `.code` and `.retryable` flag, so a caller
+(or the Settings UI) can distinguish "try again" from "fix your key"
+without parsing a message string.
+
 ## The `ruleConditions` design (why rules actually test correctly)
 
 Early in development, rule generation used a single hint -> generic
