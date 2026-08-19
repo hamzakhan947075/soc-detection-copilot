@@ -1,0 +1,83 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    name: Lint & test (Node ${{ matrix.node-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [18.x, 20.x]
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
+
+  security-audit:
+    name: Dependency security audit
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+      # Fails the build on high/critical advisories only - low/moderate
+      # findings in transitive deps are tracked but shouldn't block every PR.
+      - run: npm audit --audit-level=high
+
+  boot-smoke-test:
+    name: App boots and responds
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+      - name: Start server
+        run: nohup node src/server.js > server.log 2>&1 &
+        env:
+          PORT: 4000
+      - name: Wait for server to become ready
+        run: |
+          for i in $(seq 1 20); do
+            if curl -sf http://localhost:4000/health > /dev/null; then
+              echo "Server is up"
+              exit 0
+            fi
+            sleep 0.5
+          done
+          echo "Server never became ready" >&2
+          cat server.log
+          exit 1
+      - name: Verify /health and /ready
+        run: |
+          curl -sf http://localhost:4000/health | grep -q '"status":"ok"'
+          curl -sf http://localhost:4000/ready | grep -q '"status":"ready"'
+      - name: Show server log on failure
+        if: failure()
+        run: cat server.log

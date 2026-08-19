@@ -2,7 +2,7 @@
 
 const { makeCandidate } = require('../candidateFactory');
 
-const SQLI_PATTERNS = [/(\%27)|(')|(--)|(\%23)|(#)/i, /union(\s|\%20)+select/i, /or\s+1\s*=\s*1/i, /select.+from.+information_schema/i, /sleep\(\d+\)/i];
+const SQLI_PATTERNS = [/(%27)|(')|(--)|(%23)|(#)/i, /union(\s|%20)+select/i, /or\s+1\s*=\s*1/i, /select.+from.+information_schema/i, /sleep\(\d+\)/i];
 const XSS_PATTERNS = [/<script[\s>]/i, /onerror\s*=/i, /onload\s*=/i, /javascript:/i, /<img[^>]+src[^>]*onerror/i];
 const PATH_TRAVERSAL_PATTERNS = [/\.\.\/\.\.\//, /%2e%2e%2f/i, /\.\.\\\.\.\\/, /etc\/passwd/i, /boot\.ini/i];
 const WEBSHELL_PATTERNS = [/\b(cmd|shell|c99|r57|webshell)\.(php|asp|aspx|jsp)\b/i, /eval\(\s*\$_(get|post|request)/i, /system\(\s*\$_(get|post|request)/i];

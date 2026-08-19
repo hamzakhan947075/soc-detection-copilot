@@ -190,6 +190,35 @@ store and an `api.js` fetch wrapper. Every place that inserts
 externally-derived text (log fields, messages) into the DOM goes through
 `escapeHtml()` in `utils.js` first.
 
+## Observability
+
+`observability/requestLogger.js` is the first middleware mounted in
+`app.js`, ahead of security headers and auth, so every response - including
+401s from `requireAuth` and the 404 catch-all - gets a structured JSON log
+line: `request_id` (also echoed as an `X-Request-Id` response header),
+`timestamp`, `method`, `route` (query string stripped), `status`,
+`duration_ms`, and, only on an error response, an `error` field. That
+`error` field is never the raw exception - `security/middleware.js`'s
+`errorHandler` sets `res.locals.errorMessage` to the exact same sanitized
+string it sends the client *before* responding, and the logger only ever
+reads that already-safe value. There is no code path from a request body
+(which could contain a password or API key) into a log line, because the
+logger never reads one.
+
+## CI
+
+`.github/workflows/ci.yml` runs on every push and pull request: `npm run
+lint` (ESLint, configured at the repo root in `eslint.config.js` so one
+config covers both `backend/src`+`backend/tests` and `frontend/js`) and
+`npm test` on Node 18.x and 20.x, `npm audit --audit-level=high` as a
+dependency-vulnerability gate, and a boot smoke test that starts the real
+server with `node src/server.js` and polls `/health` and `/ready` with
+`curl` until it responds. `backend/scripts/lint.js` exists because ESLint's
+CLI rejects globs outside its own working directory - it drives the
+`ESLint` Node API from the repo root instead, so `npm run lint` works
+identically whether invoked from `backend/` (as `npm test`'s sibling
+script) or from CI.
+
 ## Security posture
 
 - File uploads are extension-allowlisted and size-limited (multer, in

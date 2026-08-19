@@ -9,11 +9,15 @@ const apiRouter = require('./routes/api');
 const authRouter = require('./routes/authRoutes');
 const { requireAuth, isAuthConfigured } = require('./auth/authMiddleware');
 const { securityHeaders, apiRateLimiter, errorHandler } = require('./security/middleware');
+const { requestLogger } = require('./observability/requestLogger');
 
 function createApp() {
   const app = express();
 
   app.disable('x-powered-by');
+  // Mounted first so every response - including 401s from requireAuth and
+  // 404s from the catch-all below - gets a request_id and a log line.
+  app.use(requestLogger());
   app.use(securityHeaders());
   app.use(cors({ origin: config.nodeEnv === 'production' ? false : true }));
   app.use(express.json({ limit: config.upload.maxPasteBytes }));

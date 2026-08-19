@@ -55,13 +55,13 @@ describe('testRule', () => {
   });
 
   test('applies distinct-count threshold (e.g. distinct destination ports per source, for port scanning)', () => {
-    const events = Array.from({ length: 20 }, (_, i) => ({
+    const events = Array.from({ length: 20 }, (_, index) => ({
       '@timestamp': new Date().toISOString(),
       source: { ip: '9.9.9.9' },
-      destination: { port: 1000 + i },
+      destination: { port: 1000 + index },
     }));
     // A second source hits the same 3 ports repeatedly - high event count, low port cardinality.
-    const repeatedPortEvents = Array.from({ length: 20 }, (_, i) => ({
+    const repeatedPortEvents = Array.from({ length: 20 }, () => ({
       '@timestamp': new Date().toISOString(),
       source: { ip: '8.8.4.4' },
       destination: { port: 443 },

@@ -1,4 +1,4 @@
-import { state, setStatus } from '../state.js';
+import { state } from '../state.js';
 import { escapeHtml, confidenceBar, statusBadge } from '../utils.js';
 import { controller } from '../controller.js';
 

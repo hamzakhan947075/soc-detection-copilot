@@ -6,7 +6,7 @@
 Take raw logs exported from Elastic — or uploaded/pasted from anywhere — and run them through a real, end-to-end detection engineering workflow: field discovery, ECS mapping, behavioral detection, MITRE ATT&CK mapping, rule generation, testing, false-positive analysis, and tuning.
 
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen)
-![Tests](https://img.shields.io/badge/tests-308%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-313%20passing-brightgreen)
 ![No build step](https://img.shields.io/badge/frontend-vanilla%20JS%2C%20no%20build%20step-blue)
 ![Deterministic core](https://img.shields.io/badge/core%20logic-deterministic-informational)
 ![Status](https://img.shields.io/badge/status-active-success)
@@ -119,11 +119,19 @@ Any other Node host works the same way (Railway, Fly.io, a plain VPS with `pm2`/
 
 ```bash
 cd backend
-npm test              # 308 tests across parsing, field discovery, ECS
+npm test              # 313 tests across parsing, field discovery, ECS
                        # mapping, detection engine, MITRE mapping, rule
                        # generation/validation, rule testing, false-positive
-                       # analysis, tuning, AI provider config, and API/upload security
+                       # analysis, tuning, AI provider config, API/upload
+                       # security, auth, and structured request logging
+npm run lint          # ESLint (backend/src, backend/tests, frontend/js);
+                       # config lives at the repo root (eslint.config.js)
+                       # since it covers both directories
 ```
+
+Both run in CI (`.github/workflows/ci.yml`) on every push/PR, on Node 18.x
+and 20.x, alongside a `npm audit --audit-level=high` dependency check and a
+smoke test that actually boots the server and hits `/health`/`/ready`.
 
 ## Project layout
 
@@ -152,11 +160,18 @@ backend/
     investigation/     per-category investigation checklists
     reporting/          Detection Engineering Report + dashboard aggregation
     ai/                 multi-provider (Claude/Groq/OpenAI/custom) narrative assist
+    auth/               opt-in single-password session auth (session.js, authMiddleware.js)
     security/          helmet, rate limiting, safe error handler
+    observability/      structured JSON-line request logging (metadata only)
     pipeline/          session store + orchestration + pipeline stage metadata
     routes/            Express API
   sample-data/         8 bundled sample datasets
-  tests/               308 tests (see above)
+  tests/               313 tests (see above)
+  scripts/lint.js       runs ESLint via its Node API against the repo root
+                       config, so `npm run lint` works whether invoked from
+                       backend/ or CI
+eslint.config.js        shared ESLint flat config for backend + frontend
+.github/workflows/       CI: lint, test (Node 18.x/20.x), npm audit, boot smoke test
 frontend/
   js/
     api.js, state.js, controller.js, pipelineBar.js, utils.js
@@ -225,6 +240,7 @@ The frontend talks to a REST API under `/api` — see `backend/src/routes/api.js
 - **SSRF hardening**: a custom AI provider's base URL is rejected if it resolves to a cloud instance-metadata address (`169.254.169.254`, `fd00:ec2::254`, `metadata.google.internal`) - loopback and private-network addresses stay allowed, since pointing at a self-hosted local LLM is an intended use of the custom provider.
 - Every outbound network call this app makes (AI provider, Elasticsearch) has a request timeout - none can hang the server indefinitely on an unreachable host. AI calls additionally retry transient failures (network error, 429, 5xx) with backoff; auth errors are never retried.
 - No `child_process`/shell execution anywhere in the codebase - there is no command-injection surface to defend.
+- **Observability**: every request gets a structured JSON log line (`request_id`, `method`, `route`, `status`, `duration_ms`, and - on an error response - the exact same sanitized message the client received) via `observability/requestLogger.js`. It logs metadata only, never a request body, so there is no code path by which a submitted password or API key reaches a log line.
 - **Authentication**: opt-in via `APP_PASSWORD` (a single shared password, not multi-user accounts - deliberately, since this is a single-analyst workspace, not a SaaS product). A signed, `HttpOnly`/`SameSite=Strict` session cookie is issued on login; the password comparison uses `crypto.timingSafeEqual`, never a plain `===`, and is never echoed back in any response. Unset means no login at all, logged as a startup warning - see [Known limitations](#known-limitations-stated-honestly-not-hidden).
 
 ## Known limitations (stated honestly, not hidden)
@@ -234,7 +250,7 @@ The frontend talks to a REST API under `/api` — see `backend/src/routes/api.js
 - PDF report export is intentionally not implemented (JSON/Markdown/CSV are); a correct PDF renderer is a substantial dependency on its own.
 - Log source identification and ECS mapping are confidence-scored heuristics, not guaranteed-correct — the UI always shows confidence and reasoning, and never presents an uncertain mapping or MITRE technique as definitive.
 - **Detection lifecycle persistence is real but narrow, not general persistence.** A detection's approval/production status and version history now survive a restart via SQLite (`persistence/`) - but everything else (parsed events, mappings, normalized events, in-session detections/rules/test results) is still in-memory only, and on Render's free tier the SQLite file itself doesn't survive a deploy/spin-down unless it's on a mounted persistent disk.
-- **The positive/negative/edge test-case framework validates a rule's own logic in isolation, not real-world coverage.** Auto-generated cases prove the rule matches what it says it matches and doesn't match an obviously different value - they cannot tell you whether the rule covers every real attacker variation, only whether its stated conditions behave as claimed. Frontend test coverage is still zero (all 308 tests are backend-only).
+- **The positive/negative/edge test-case framework validates a rule's own logic in isolation, not real-world coverage.** Auto-generated cases prove the rule matches what it says it matches and doesn't match an obviously different value - they cannot tell you whether the rule covers every real attacker variation, only whether its stated conditions behave as claimed. Frontend test coverage is still zero (all 313 tests are backend-only).
 - **Authentication is real but intentionally minimal**: one shared password (`APP_PASSWORD`), not per-analyst accounts - there's no username, no audit trail of *who* approved a detection beyond the free-text `author` field callers can set on their own, and no way to revoke a single session early (no server-side session table to delete from) short of changing `SESSION_SECRET`, which invalidates every session at once including your own, or waiting out the 12-hour TTL. This is a deliberate scope boundary for a single-analyst tool, not an oversight - see [ARCHITECTURE_AUDIT.md](ARCHITECTURE_AUDIT.md) for the full maturity assessment and roadmap.
 
 ---

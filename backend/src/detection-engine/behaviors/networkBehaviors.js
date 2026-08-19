@@ -1,7 +1,7 @@
 'use strict';
 
 const { makeCandidate } = require('../candidateFactory');
-const { groupBy, maxEventsInWindow } = require('../utils');
+const { groupBy } = require('../utils');
 const { evaluateDnsTunneling } = require('../evaluators/dnsTunnelingEvaluator');
 const { evaluateBeaconing } = require('../evaluators/c2BeaconingEvaluator');
 

@@ -39,15 +39,21 @@ function apiRateLimiter() {
  */
 function errorHandler(err, _req, res, _next) {
   if (err instanceof SafeParseError || err instanceof UploadValidationError) {
+    res.locals.errorMessage = err.message;
     res.status(400).json({ error: err.message });
     return;
   }
   if (err && err.name === 'MulterError') {
-    res.status(400).json({ error: `Upload rejected: ${err.message}` });
+    const message = `Upload rejected: ${err.message}`;
+    res.locals.errorMessage = message;
+    res.status(400).json({ error: message });
     return;
   }
-  // eslint-disable-next-line no-console
   console.error('Unhandled error:', err);
+  // observability/requestLogger.js's request-completion log line picks up
+  // res.locals.errorMessage - this is deliberately the same safe, generic
+  // text sent to the client, never the raw err/stack logged just above.
+  res.locals.errorMessage = 'Internal error';
   res.status(500).json({ error: 'An internal error occurred while processing the request.' });
 }
 
