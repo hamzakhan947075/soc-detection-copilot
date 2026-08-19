@@ -44,6 +44,8 @@ export async function render(container) {
       setStatus(`Matched ${testResult.eventsMatched}/${testResult.eventsTested} events (${testResult.matchRatePercent}%).`);
     } catch (err) {
       setStatus(err.message, true);
+      const outputEl = container.querySelector('#testOutput');
+      if (outputEl) outputEl.innerHTML = `<div class="error-box">${escapeHtml(err.message)}</div>`;
     }
   });
 

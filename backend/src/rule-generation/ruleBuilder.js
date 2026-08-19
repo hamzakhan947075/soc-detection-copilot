@@ -28,6 +28,7 @@ function buildRule(detection, options = {}) {
     ruleType = 'kql', // kql | esql | eql | lucene | sigma | threshold
     indexPattern,
     severityOverride,
+    detectionVersion = 1,
   } = options;
 
   const severity = severityOverride || detection.severity;
@@ -36,7 +37,7 @@ function buildRule(detection, options = {}) {
 
   const language = ruleType === 'threshold' ? 'kql' : ruleType;
   const query = generateQuery(language, conditions, resolvedIndex, detection);
-  const validation = validateRule(query, language);
+  const validation = validateRule(query, language, conditions);
 
   const checklist = getChecklist(detection.category);
   const fpGuidance = getFpGuidance(detection.mitreHint);
@@ -49,8 +50,17 @@ function buildRule(detection, options = {}) {
     ruleType: language,
     conditions,
     query,
+    // Traceability (Detection Logic -> Structured Conditions -> Query
+    // Builder -> Generated Query -> Validation): detectionVersion ties this
+    // specific query back to the persisted detection version it was
+    // generated from (see persistence/detectionStore.js), so a later
+    // change to the detection's logic doesn't get silently confused with
+    // an old generated query.
+    generatedAt: new Date().toISOString(),
+    detectionVersion,
     queryValid: validation.valid,
     queryValidationErrors: validation.errors,
+    queryValidationWarnings: validation.warnings,
     requiredFields: detection.requiredFields,
     dataSource: detection.category,
     indexPattern: resolvedIndex,

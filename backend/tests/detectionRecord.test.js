@@ -85,6 +85,19 @@ describe('createDetectionRecord', () => {
     expect(record.testSuiteResult.metrics.precision).toBe(1);
   });
 
+  test('surfaces the rule\'s query validation status and generation timestamp', () => {
+    const rule = { query: 'x', ruleType: 'kql', generatedAt: '2026-08-19T12:00:00Z', queryValid: false, queryValidationErrors: ['bad'], queryValidationWarnings: ['careful'] };
+    const record = createDetectionRecord(baseCandidate(), { rule });
+    expect(record.queryGeneratedAt).toBe('2026-08-19T12:00:00Z');
+    expect(record.queryValidation).toEqual({ valid: false, errors: ['bad'], warnings: ['careful'] });
+  });
+
+  test('queryValidation is null when no rule has been generated', () => {
+    const record = createDetectionRecord(baseCandidate());
+    expect(record.queryValidation).toBeNull();
+    expect(record.queryGeneratedAt).toBeNull();
+  });
+
   test('includes the rule query/language and false-positive profile when a rule is supplied', () => {
     const candidate = baseCandidate();
     const rule = { query: 'event.outcome:"failure"', ruleType: 'kql', lastTestResult: { eventsMatched: 5 }, lastFpAnalysis: { falsePositiveRatePercent: 10 } };

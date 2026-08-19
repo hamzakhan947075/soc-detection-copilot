@@ -48,6 +48,62 @@ describe('validateRule', () => {
   test('rejects dangerous destructive-looking constructs', () => {
     expect(validateRule('event.category:"x"; DROP TABLE users', 'kql').valid).toBe(false);
   });
+
+  test('always returns a warnings array, even with no conditions supplied', () => {
+    const result = validateRule('event.category:"authentication"', 'kql');
+    expect(Array.isArray(result.warnings)).toBe(true);
+  });
+
+  test('warns (but does not invalidate) a bare match-all query', () => {
+    const result = validateRule('*', 'kql');
+    expect(result.valid).toBe(true);
+    expect(result.warnings.some((w) => /match-all/.test(w))).toBe(true);
+  });
+
+  test('warns on a leading wildcard but not on a bare exists check', () => {
+    const leading = validateRule('url.path:*.php', 'kql');
+    expect(leading.warnings.some((w) => /leading wildcard/.test(w))).toBe(true);
+
+    const exists = validateRule('destination.port:*', 'kql');
+    expect(exists.warnings.some((w) => /leading wildcard/.test(w))).toBe(false);
+  });
+
+  test('errors on contradictory exact conditions for the same field', () => {
+    const conditions = [
+      { field: 'event.outcome', value: 'success', exact: true },
+      { field: 'event.outcome', value: 'failure', exact: true },
+    ];
+    const result = validateRule('event.outcome:"success" and event.outcome:"failure"', 'kql', conditions);
+    expect(result.valid).toBe(false);
+    expect(result.errors.some((e) => /Contradictory conditions/.test(e))).toBe(true);
+  });
+
+  test('does not flag two different fields as contradictory', () => {
+    const conditions = [
+      { field: 'event.category', value: 'authentication' },
+      { field: 'event.outcome', value: 'failure' },
+    ];
+    const result = validateRule('event.category:"authentication" and event.outcome:"failure"', 'kql', conditions);
+    expect(result.errors).toEqual([]);
+  });
+
+  test('errors on an impossible empty-range cidr condition', () => {
+    const conditions = [{ field: 'source.ip', cidr: { ranges: [], mode: 'in' } }];
+    const result = validateRule('source.ip:*', 'kql', conditions);
+    expect(result.valid).toBe(false);
+    expect(result.errors.some((e) => /can never match/.test(e))).toBe(true);
+  });
+
+  test('warns when a condition references a field outside ECS entirely, but not for a real ECS field', () => {
+    const customConditions = [{ field: 'auth.mfa_used', value: 'true' }];
+    const customResult = validateRule('auth.mfa_used:"true"', 'kql', customConditions);
+    expect(customResult.valid).toBe(true);
+    expect(customResult.warnings.some((w) => /not an ECS field/.test(w))).toBe(true);
+
+    const ecsConditions = [{ field: 'user.name', value: 'root' }];
+    const ecsResult = validateRule('user.name:"root"', 'kql', ecsConditions);
+    expect(ecsResult.warnings.some((w) => /not an ECS field/.test(w))).toBe(false);
+  });
 });
 
 describe('buildRule', () => {
@@ -107,6 +163,18 @@ describe('buildRule', () => {
     detection.recommendedThreshold = { count: 15, groupBy: ['source.ip'], distinctField: 'destination.port' };
     const rule = buildRule(detection, { ruleType: 'esql', indexPattern: 'logs-*' });
     expect(rule.query).toContain('COUNT_DISTINCT(destination.port)');
+  });
+
+  test('includes traceability fields: generatedAt, detectionVersion, and validation warnings', () => {
+    const rule = buildRule(bruteForceDetection(), { ruleType: 'kql', detectionVersion: 3 });
+    expect(rule.detectionVersion).toBe(3);
+    expect(new Date(rule.generatedAt).toString()).not.toBe('Invalid Date');
+    expect(Array.isArray(rule.queryValidationWarnings)).toBe(true);
+  });
+
+  test('defaults detectionVersion to 1 when not supplied (no persisted lifecycle yet)', () => {
+    const rule = buildRule(bruteForceDetection(), { ruleType: 'kql' });
+    expect(rule.detectionVersion).toBe(1);
   });
 
   test('escapes malicious characters embedded in detection evidence', () => {

@@ -372,7 +372,9 @@ router.post('/sessions/:sessionId/rules', requireSession, (req, res) => {
   }
 
   const resolvedIndex = indexPattern || (session.logSource && session.logSource.recommendedDataset ? `logs-${session.logSource.recommendedDataset}-*` : 'logs-*');
-  const rule = buildRule(detection, { ruleType, indexPattern: resolvedIndex, severityOverride });
+  const evaluatorId = `${detection.category}.${detection.mitreHint || 'generic'}`;
+  const persistedForVersion = detectionStore.get(evaluatorId);
+  const rule = buildRule(detection, { ruleType, indexPattern: resolvedIndex, severityOverride, detectionVersion: persistedForVersion ? persistedForVersion.version : 1 });
   const ruleId = `rule-${Date.now().toString(36)}-${Math.round(Math.random() * 1e6)}`;
   session.rules.set(ruleId, { ...rule, ruleId, detectionId });
   session.stage = 'rule-generated';

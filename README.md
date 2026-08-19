@@ -6,7 +6,7 @@
 Take raw logs exported from Elastic — or uploaded/pasted from anywhere — and run them through a real, end-to-end detection engineering workflow: field discovery, ECS mapping, behavioral detection, MITRE ATT&CK mapping, rule generation, testing, false-positive analysis, and tuning.
 
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen)
-![Tests](https://img.shields.io/badge/tests-244%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-255%20passing-brightgreen)
 ![No build step](https://img.shields.io/badge/frontend-vanilla%20JS%2C%20no%20build%20step-blue)
 ![Deterministic core](https://img.shields.io/badge/core%20logic-deterministic-informational)
 ![Status](https://img.shields.io/badge/status-active-success)
@@ -60,7 +60,7 @@ flowchart LR
 | **Detection Engineering** | Auth / Linux / Windows / network / web / firewall behavior analysis |
 | **MITRE ATT&CK Mapping** | Static, explainable lookup — uncertainty is always flagged, never hidden |
 | **Rule Generation** | KQL / ES\|QL / EQL / Lucene / Sigma, built from the detection's own match logic |
-| **Rule Validation** | Syntax-checked — never executed against a live system by this tool |
+| **Rule Validation** | Syntax + logic checked (contradictory/impossible conditions, non-ECS fields, leading wildcards, bare match-all) — errors vs warnings kept separate, never executed against a live system |
 | **Rule Testing** | Run against your own loaded logs for real match counts |
 | **False Positive Analysis** | Potential FPs cross-checked against the detection's own evidence |
 | **Tuning** | Threshold recommendation with a real before/after re-test |
@@ -77,6 +77,7 @@ flowchart LR
 - 🎯 **MITRE ATT&CK mapping** that never overstates confidence
 - 📝 **5 query languages** generated per detection: KQL, ES\|QL, EQL, Lucene, Sigma
 - ✅ **Real rule testing** — each detection carries the exact structured conditions that reproduced its own match, so "test against sample logs" reflects reality instead of a generic placeholder
+- 🔎 **Errors vs. warnings in rule validation** — contradictory/impossible conditions (e.g. one field required to equal two different values at once) are hard errors; non-ECS fields, leading wildcards, and bare match-all queries are warnings, not blockers. Every generated query also carries `generatedAt` and the `detectionVersion` it was built from, so a query can never be silently mistaken for a different revision of the same detection
 - 🧪 **Positive/negative/edge test-case framework** — every rule gets an auto-generated set of test cases (seeded from a real matched event when one exists) plus PASS/FAIL/ERROR/SKIPPED per case and a real confusion matrix (precision/recall/F1/detection-rate/FP-rate, `null` rather than faked when a denominator is zero); analysts can add their own cases on top
 - 📊 **SOC-style dashboard** — logs processed, mapping coverage, detections, rules validated, MITRE technique count, high-risk findings
 - 🌓 **Dark SOC/SIEM-themed UI** — 13 tabs, no build step, no framework
@@ -114,7 +115,7 @@ Any other Node host works the same way (Railway, Fly.io, a plain VPS with `pm2`/
 
 ```bash
 cd backend
-npm test              # 244 tests across parsing, field discovery, ECS
+npm test              # 255 tests across parsing, field discovery, ECS
                        # mapping, detection engine, MITRE mapping, rule
                        # generation/validation, rule testing, false-positive
                        # analysis, tuning, AI provider config, and API/upload security
@@ -151,7 +152,7 @@ backend/
     pipeline/          session store + orchestration + pipeline stage metadata
     routes/            Express API
   sample-data/         8 bundled sample datasets
-  tests/               244 tests (see above)
+  tests/               255 tests (see above)
 frontend/
   js/
     api.js, state.js, controller.js, pipelineBar.js, utils.js
@@ -220,7 +221,7 @@ The frontend talks to a REST API under `/api` — see `backend/src/routes/api.js
 - PDF report export is intentionally not implemented (JSON/Markdown/CSV are); a correct PDF renderer is a substantial dependency on its own.
 - Log source identification and ECS mapping are confidence-scored heuristics, not guaranteed-correct — the UI always shows confidence and reasoning, and never presents an uncertain mapping or MITRE technique as definitive.
 - **Detection lifecycle persistence is real but narrow, not general persistence.** A detection's approval/production status and version history now survive a restart via SQLite (`persistence/`) - but everything else (parsed events, mappings, normalized events, in-session detections/rules/test results) is still in-memory only, and on Render's free tier the SQLite file itself doesn't survive a deploy/spin-down unless it's on a mounted persistent disk.
-- **The positive/negative/edge test-case framework validates a rule's own logic in isolation, not real-world coverage.** Auto-generated cases prove the rule matches what it says it matches and doesn't match an obviously different value - they cannot tell you whether the rule covers every real attacker variation, only whether its stated conditions behave as claimed. Frontend test coverage is still zero (all 244 tests are backend-only).
+- **The positive/negative/edge test-case framework validates a rule's own logic in isolation, not real-world coverage.** Auto-generated cases prove the rule matches what it says it matches and doesn't match an obviously different value - they cannot tell you whether the rule covers every real attacker variation, only whether its stated conditions behave as claimed. Frontend test coverage is still zero (all 255 tests are backend-only).
 - There is still no authentication — see [ARCHITECTURE_AUDIT.md](ARCHITECTURE_AUDIT.md) for the full maturity assessment and roadmap.
 
 ---

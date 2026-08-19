@@ -29,6 +29,8 @@ export async function render(container) {
       setStatus('Tuning recommendation ready.');
     } catch (err) {
       setStatus(err.message, true);
+      const outputEl = container.querySelector('#tuningOutput');
+      if (outputEl) outputEl.innerHTML = `<div class="error-box">${escapeHtml(err.message)}</div>`;
     }
   });
 

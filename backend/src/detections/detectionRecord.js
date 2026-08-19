@@ -55,6 +55,10 @@ function createDetectionRecord(candidate, context = {}) {
     mitre: buildMitre(candidate.mitre),
     query: (rule && rule.query) || (persisted && persisted.query) || null,
     queryLanguage: (rule && rule.ruleType) || (persisted && persisted.queryLanguage) || null,
+    queryGeneratedAt: (rule && rule.generatedAt) || null,
+    queryValidation: rule
+      ? { valid: rule.queryValid, errors: rule.queryValidationErrors || [], warnings: rule.queryValidationWarnings || [] }
+      : null,
     testCases: (rule && rule.lastTestCases) || { positive: [], negative: [], edge: [] },
     testSuiteResult: (rule && rule.lastTestSuite) || null,
     testResult,

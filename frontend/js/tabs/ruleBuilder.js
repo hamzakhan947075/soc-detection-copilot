@@ -104,6 +104,7 @@ function wireEvents(container) {
     const indexPattern = container.querySelector('#indexPatternInput').value;
 
     setStatus('Generating detection rule…');
+    const outputEl = container.querySelector('#ruleOutput');
     try {
       const rule = await api.createRule(state.sessionId, { detectionId, ruleType, severityOverride, indexPattern });
       state.rules.push(rule);
@@ -112,6 +113,7 @@ function wireEvents(container) {
       setStatus(rule.queryValid ? 'Rule generated and syntax-validated.' : 'Rule generated but failed syntax validation - review before use.', !rule.queryValid);
     } catch (err) {
       setStatus(err.message, true);
+      if (outputEl) outputEl.innerHTML = `<div class="error-box">${escapeHtml(err.message)}</div>`;
     }
   });
 
@@ -135,6 +137,7 @@ function renderRuleOutput(container, rule) {
       <h3>Query (${escapeHtml(rule.ruleType.toUpperCase())})</h3>
       <pre>${escapeHtml(rule.query)}</pre>
       ${rule.queryValid ? '<div class="ok-box">Query passed syntax validation.</div>' : `<div class="error-box">Validation errors: ${rule.queryValidationErrors.map(escapeHtml).join('; ')}</div>`}
+      ${rule.queryValidationWarnings && rule.queryValidationWarnings.length > 0 ? `<div class="warn-box section-gap">${rule.queryValidationWarnings.map(escapeHtml).join('<br>')}</div>` : ''}
 
       <div class="grid grid-3 section-gap">
         <div class="stat-card"><div class="stat-value">${rule.riskScore}</div><div class="stat-label">Risk Score</div></div>
