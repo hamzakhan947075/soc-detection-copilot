@@ -1,5 +1,15 @@
 # Architecture Audit — SOC Detection Copilot
 
+> **Historical document.** This is the original, pre-refactor audit that
+> scoped the 14-milestone maturity effort described in `README.md`. Most
+> of the gaps identified below (rule-generation traceability, ECS mapping
+> statuses, FP dimensional breakdown, tuning verification, AI provider
+> hardening, prototype-pollution/SSRF fixes, authentication, observability,
+> CI, and frontend test coverage) have since been addressed - see
+> [MATURITY.md](MATURITY.md) for the current, fact-checked state. Kept
+> here unedited as the record of what the codebase looked like *before*
+> that work, not as a description of its current state.
+
 **Date:** 2026-08-19
 **Baseline:** `main` @ `9055a35`, 125 backend tests passing (9 suites), 0 frontend tests.
 **Scope:** Full backend + frontend inspection, read-only. No code was changed while producing this document.

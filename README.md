@@ -6,7 +6,7 @@
 Take raw logs exported from Elastic — or uploaded/pasted from anywhere — and run them through a real, end-to-end detection engineering workflow: field discovery, ECS mapping, behavioral detection, MITRE ATT&CK mapping, rule generation, testing, false-positive analysis, and tuning.
 
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen)
-![Tests](https://img.shields.io/badge/tests-313%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-351%20passing-brightgreen)
 ![No build step](https://img.shields.io/badge/frontend-vanilla%20JS%2C%20no%20build%20step-blue)
 ![Deterministic core](https://img.shields.io/badge/core%20logic-deterministic-informational)
 ![Status](https://img.shields.io/badge/status-active-success)
@@ -29,6 +29,7 @@ This is **not** a generic "paste logs, get an AI answer" tool. Every calculation
 - [API](#api)
 - [Security](#security)
 - [Known limitations](#known-limitations-stated-honestly-not-hidden)
+- [MATURITY.md](MATURITY.md) — a deterministic, fact-checked production-readiness assessment (test counts, security controls, and explicit scope boundaries, each tied to a re-runnable command or file reference)
 
 ## The pipeline
 
@@ -201,6 +202,7 @@ All optional — copy `backend/.env.example` to `backend/.env`. Nothing here is 
 | Variable | Purpose |
 |---|---|
 | `PORT` | HTTP port (default `4000`) |
+| `NODE_ENV` | `production` restricts CORS to same-origin and marks the session cookie `Secure` (requires HTTPS); anything else (including unset) allows any origin and omits `Secure`, for local development |
 | `APP_PASSWORD` | If set, every API route requires this password (session cookie, 12h TTL) - **unset means no login at all**, logged as a startup warning. See [Security](#security) |
 | `SESSION_SECRET` | Signs the session cookie; auto-generated per boot if unset (sessions then don't survive a restart) |
 | `MAX_UPLOAD_BYTES`, `MAX_PASTE_BYTES`, `MAX_EVENTS_PER_DATASET` | Upload/ingestion limits |
